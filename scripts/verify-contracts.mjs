@@ -42,7 +42,10 @@ for (const version of ['10.6.109', '11.0.97']) {
     let schema = source;
     for (const part of conflict.pointer.slice(2).split('/')) schema = schema[part.replaceAll('~1', '/').replaceAll('~0', '~')];
     assert.equal(createHash('sha256').update(JSON.stringify(canonical(schema))).digest('hex'), conflict.sourceHash);
-    if (conflict.kind === 'description_vs_null_schema') assert.notDeepEqual(validator.validate(conflict.pointer, null), [], conflict.id);
+    if (conflict.kind === 'description_vs_null_schema') {
+      const approved = ledger.nullResponses.some(rule => rule.version === version && rule.pointer === conflict.pointer);
+      assert.equal(validator.validate(conflict.pointer, null).length === 0, approved, conflict.id);
+    }
     for (const assignment of conflict.assignments) for (const caseId of assignment.cases) rows.push({
       version, conflict: conflict.id, pointer: conflict.pointer, operation: assignment.operation, case: caseId, status: conflict.status,
     });

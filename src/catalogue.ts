@@ -31,6 +31,9 @@ interface Contract {
 
 export const versions = ['10.6.109', '11.0.97'] as const;
 
+export const readOperations = new Set(['OP-003', 'OP-004', 'OP-005', 'OP-006', 'OP-014', 'OP-015',
+  'OP-017', 'OP-018', 'OP-021', 'OP-024', 'OP-048', 'OP-051', 'OP-053', 'OP-054', 'OP-066', 'OP-067', 'OP-068']);
+
 export const contracts = Object.fromEntries(versions.map(version => [version,
   JSON.parse(readFileSync(new URL(`../evidence/sources/network-${version}-openapi.json`, import.meta.url), 'utf8')) as Contract,
 ]));
@@ -52,7 +55,7 @@ export const catalogue = commands.map(command => {
     method: primary.method,
     path: primary.path,
     effect: primary.method === 'GET' ? 'read' : 'write',
-    status: ['info', 'site list'].includes(command.command) ? 'implemented' : 'not-implemented',
+    status: ['info', 'site list'].includes(command.command) || readOperations.has(command.id) ? 'implemented' : 'not-implemented',
     contracts: variants.map(({ version, parameters = [], requestBody, responses }) => ({
       version, source: `evidence/sources/network-${version}-openapi.json`,
       parameters, ...(requestBody ? { requestBody } : {}), responses,

@@ -8,8 +8,10 @@ import { once } from 'node:events';
 import { decode } from '@toon-format/toon';
 import { verifyApplication } from './application.mjs';
 import { verifyReads } from './reads.mjs';
+import { verifyInventory } from './inventory.mjs';
 
 export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false }) {
+  const inventoryRows = [];
   const home = join(temporary, 'credentials');
   mkdirSync(home, { mode: 0o700 });
   const config = join(home, 'config with spaces.json');
@@ -231,6 +233,11 @@ Set-Acl -LiteralPath $p -AclObject $acl
         configure, trusted, installed,
         seed: handler => { requests = []; respond = handler; }, requests: () => requests,
       });
+      configure({ lab: trusted });
+      inventoryRows.push(...await verifyInventory({
+        cli: (args, code = 0) => cli(args, code, keys, false),
+        seed: handler => { requests = []; respond = handler; },
+      }));
     }
   } finally {
     server.closeAllConnections();
@@ -246,5 +253,5 @@ Set-Acl -LiteralPath $p -AclObject $acl
   if (journey) rows.push({ task: 'B1.2a', acceptance: 'STEP-B1.2a', operation: ['OP-001', 'OP-002'],
     version: ['10.6.109', '11.0.97'], variant: null, direction: 'standalone-synthetic',
     status: 'passed-on-current-platform', nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING' });
-  return rows;
+  return [...rows, ...inventoryRows];
 }

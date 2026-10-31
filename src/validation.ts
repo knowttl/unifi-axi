@@ -71,6 +71,8 @@ export function compileContract(source: unknown, version: string) {
     const resolution = ledger.resolutions.find(rule => rule.version === version && rule.pointer === pointer);
     const enumValues = resolution ? resolution.positive : schema.enum;
     const check: Check = (value, path, inherited) => {
+      // NORM-001: this response field alone documents null as disabled.
+      if (value === null && ledger.nullResponses.some(rule => rule.version === version && rule.pointer === pointer)) return [];
       const errors: string[] = [];
       const fail = (message: string) => errors.push(`${path}: ${message} [schema=${pointer}]`);
       if (reference) errors.push(...reference(value, path, inherited));
@@ -141,7 +143,25 @@ export function compileContract(source: unknown, version: string) {
       if (body.schema) compile(body.schema, `${base}/requestBody/content/${escape(media)}/schema`);
     }
   }
-  return { validate(pointer: string, value: unknown): string[] { return compile(at(pointer), pointer)(value, '', false); } };
+  return {
+    validate(pointer: string, value: unknown): string[] { return compile(at(pointer), pointer)(value, '', false); },
+    structuralConflicts(pointer: string) {
+      const reachable = new Set<string>();
+      function visit(schema: Schema, location: string): void {
+        if (reachable.has(location)) return;
+        reachable.add(location);
+        if (schema.$ref) visit(at(schema.$ref), schema.$ref);
+        for (const ref of Object.values(schema.discriminator?.mapping ?? {})) visit(at(ref), ref);
+        for (const [name, child] of Object.entries(schema.properties ?? {})) visit(child, `${location}/properties/${escape(name)}`);
+        for (const [index, child] of (schema.allOf ?? []).entries()) visit(child, `${location}/allOf/${index}`);
+        if (schema.items) visit(schema.items, `${location}/items`);
+        if (typeof schema.additionalProperties === 'object') visit(schema.additionalProperties, `${location}/additionalProperties`);
+      }
+      visit(at(pointer), pointer);
+      return conflicts.rows.filter(row => row.version === version && row.status === 'blocked' &&
+        row.kind !== 'description_vs_null_schema' && reachable.has(row.pointer));
+    },
+  };
 }
 
 const validators = new Map<string, ReturnType<typeof compileContract>>();
@@ -169,8 +189,15 @@ export function contractConflicts(version: string, family?: string) {
 export function validateResponse(version: string, operationId: string, value: unknown): void {
   const operation = catalogue.find(operation => operation.id === operationId);
   if (!operation) throw new Error(`Unknown operation: ${operationId}`);
-  const blocked = contractConflicts(version, operation.command.split(' ')[0]).filter(row => row.status === 'blocked');
-  if (blocked.length) throw new ToolError('CONTRACT_CONFLICT', `Family validation blocked by ${blocked.map(row => `${row.id} ${row.pointer}`).join(', ')}.`);
   const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}/responses/200/content/application~1json/schema`;
-  if (contractValidator(version).validate(pointer, value).length) throw new ToolError('RESPONSE_INVALID', 'Response does not match the selected version contract.');
+  const validator = contractValidator(version);
+  const blocked = validator.structuralConflicts(pointer);
+  // CF-007 remains a device-family gate until a version-specific PoE resolution is approved.
+  if (version === '11.0.97' && operation.command.startsWith('device ')) {
+    const poe = contractConflicts(version, 'device').find(row => row.id === 'CF-007' && row.status === 'blocked');
+    if (poe && !blocked.includes(poe)) blocked.push(poe);
+  }
+  if (blocked.length) throw new ToolError('CONTRACT_CONFLICT', `Response validation blocked by ${blocked.map(row => `${row.id} ${row.pointer}`).join(', ')}.`);
+  const errors = validator.validate(pointer, value);
+  if (errors.length) throw new ToolError('RESPONSE_INVALID', `Response does not match the selected version contract: ${errors[0]}`);
 }

@@ -183,24 +183,33 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   rmSync(deniedLog);
   watcher = watch(calls, { recursive: true }, () => {
     const observe = path => {
-      if (!existsSync(path)) return;
-      for (const entry of readdirSync(path, { withFileTypes: true })) {
+      let entries;
+      try { entries = readdirSync(path, { withFileTypes: true }); }
+      catch (error) {
+        if (error.code === 'ENOENT') return;
+        throw error;
+      }
+      for (const entry of entries) {
         const target = join(path, entry.name);
         if (entry.isDirectory()) observe(target);
         else {
-          staged.add(target);
-          assert.equal(statSync(target).mode & 0o077, 0, 'Staged files are private');
-          if (entry.name === 'config.json') {
-            const config = JSON.parse(readFileSync(target, 'utf8'));
-            if (config.profiles?.artium) {
-              assert.deepEqual(config.profiles.artium.apiKey, { env: 'ARTIUM_SECRET_0' });
-              report.isolation.push({ file: target.slice(scratch.length), mode: statSync(target).mode & 0o777, secretRef: config.profiles.artium.apiKey });
-              if (rejectAfterStaging) {
-                rejectAfterStaging = false;
-                stagingRejections++;
-                db.prepare("UPDATE users SET disabled = 1 WHERE id = 'synthetic-user'").run();
+          try {
+            staged.add(target);
+            assert.equal(statSync(target).mode & 0o077, 0, 'Staged files are private');
+            if (entry.name === 'config.json') {
+              const config = JSON.parse(readFileSync(target, 'utf8'));
+              if (config.profiles?.artium) {
+                assert.deepEqual(config.profiles.artium.apiKey, { env: 'ARTIUM_SECRET_0' });
+                report.isolation.push({ file: target.slice(scratch.length), mode: statSync(target).mode & 0o777, secretRef: config.profiles.artium.apiKey });
+                if (rejectAfterStaging) {
+                  rejectAfterStaging = false;
+                  stagingRejections++;
+                  db.prepare("UPDATE users SET disabled = 1 WHERE id = 'synthetic-user'").run();
+                }
               }
             }
+          } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
           }
         }
       }

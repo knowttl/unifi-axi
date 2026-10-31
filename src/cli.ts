@@ -164,7 +164,7 @@ export async function main(args: string[]): Promise<number> {
         error: { code: 'UNVERIFIED_API_VERSION', message: 'Unknown Network application version. Select a shipped apiContract in the profile for read-only investigation.' } }, 1);
       if (command === 'info' || command === 'doctor') return emit({ ...result,
         ...(command === 'doctor' ? { doctor: { credentials: 'resolved', tls: 'verified', application: 'accessible' } } : {}) });
-      const listing = await sites(selected.profile, secret, values);
+      const listing = await sites(selected.profile, secret, values, result.api.contract);
       const requested = values.site ?? selected.profile.siteId;
       const context = `${profileContext}${configContext}`;
       let siteId: string | undefined;

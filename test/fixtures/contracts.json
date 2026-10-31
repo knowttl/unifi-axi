@@ -1,0 +1,253 @@
+[
+  {
+    "id": "VAR-002",
+    "version": "10.6.109",
+    "pointer": "#/components/schemas/ACL rule",
+    "value": {
+      "action": "ALLOW",
+      "description": "Synthetic policy for VLAN 42",
+      "destinationFilter": {
+        "ipAddressesOrSubnets": [
+          "192.0.2.10/24"
+        ],
+        "portFilter": [
+          7
+        ],
+        "type": "IP_ADDRESSES_OR_SUBNETS"
+      },
+      "enabled": true,
+      "enforcingDeviceFilter": {
+        "deviceIds": [
+          "9d070b41-4bab-e479-b497-d9477ab4b51a"
+        ],
+        "type": "DEVICES"
+      },
+      "id": "4ac847d6-788b-21e4-6b34-617e108ebd57",
+      "index": 2,
+      "metadata": {
+        "origin": "DERIVED"
+      },
+      "name": "Variant fixture 42",
+      "protocolFilter": [
+        "TCP"
+      ],
+      "sourceFilter": {
+        "ipAddressesOrSubnets": [
+          "192.0.2.10/24"
+        ],
+        "portFilter": [
+          7
+        ],
+        "type": "IP_ADDRESSES_OR_SUBNETS"
+      },
+      "type": "IPV4"
+    }
+  },
+  {
+    "id": "VAR-1039",
+    "version": "10.6.109",
+    "pointer": "#/components/schemas/Firewall policy",
+    "value": {
+      "action": {
+        "allowReturnTraffic": true,
+        "type": "ALLOW"
+      },
+      "connectionStateFilter": [
+        "NEW"
+      ],
+      "description": "Synthetic policy for VLAN 42",
+      "destination": {
+        "trafficFilter": {
+          "applicationFilter": {
+            "applicationIds": [
+              7
+            ]
+          },
+          "portFilter": {
+            "items": [
+              {
+                "type": "PORT_NUMBER",
+                "value": 8443
+              }
+            ],
+            "matchOpposite": false,
+            "type": "PORTS"
+          },
+          "type": "APPLICATION"
+        },
+        "zoneId": "bc8dcee5-2686-8d0d-d1aa-c4deeb62eff3"
+      },
+      "enabled": true,
+      "id": "4ac847d6-788b-21e4-6b34-617e108ebd57",
+      "index": 2,
+      "ipProtocolScope": {
+        "ipVersion": "IPV4"
+      },
+      "ipsecFilter": "MATCH_ENCRYPTED",
+      "loggingEnabled": true,
+      "metadata": {
+        "origin": "DERIVED"
+      },
+      "name": "Variant fixture 42",
+      "schedule": {
+        "mode": "CUSTOM",
+        "repeatOnDays": [
+          "MONDAY"
+        ],
+        "startDate": "2026-11-02",
+        "stopDate": "2026-11-06",
+        "timeFilter": {
+          "startTime": "09:15",
+          "stopTime": "17:45"
+        }
+      },
+      "source": {
+        "trafficFilter": {
+          "ipv6IidFilter": {
+            "ipv6Iid": "fixture-42",
+            "matchOpposite": false
+          },
+          "macAddressFilter": "02:00:00:00:42:11",
+          "portFilter": {
+            "items": [
+              {
+                "type": "PORT_NUMBER",
+                "value": 8443
+              }
+            ],
+            "matchOpposite": false,
+            "type": "PORTS"
+          },
+          "type": "IPV6_IID"
+        },
+        "zoneId": "399a9d65-7c80-4ca0-0c42-9715b3907ce3"
+      }
+    }
+  },
+  {
+    "id": "VAR-002",
+    "version": "11.0.97",
+    "pointer": "#/components/schemas/ACL rule",
+    "value": {
+      "action": "ALLOW",
+      "description": "Synthetic policy for VLAN 42",
+      "destinationFilter": {
+        "ipAddressesOrSubnets": [
+          "192.0.2.10/24"
+        ],
+        "portFilter": [
+          7
+        ],
+        "type": "IP_ADDRESSES_OR_SUBNETS"
+      },
+      "enabled": true,
+      "enforcingDeviceFilter": {
+        "deviceIds": [
+          "9d070b41-4bab-e479-b497-d9477ab4b51a"
+        ],
+        "type": "DEVICES"
+      },
+      "id": "4ac847d6-788b-21e4-6b34-617e108ebd57",
+      "index": 2,
+      "metadata": {
+        "origin": "DERIVED"
+      },
+      "name": "Variant fixture 42",
+      "protocolFilter": [
+        "TCP"
+      ],
+      "sourceFilter": {
+        "ipAddressesOrSubnets": [
+          "192.0.2.10/24"
+        ],
+        "portFilter": [
+          7
+        ],
+        "type": "IP_ADDRESSES_OR_SUBNETS"
+      },
+      "type": "IPV4"
+    }
+  },
+  {
+    "id": "VAR-1039",
+    "version": "11.0.97",
+    "pointer": "#/components/schemas/Firewall policy",
+    "value": {
+      "action": {
+        "allowReturnTraffic": true,
+        "type": "ALLOW"
+      },
+      "connectionStateFilter": [
+        "NEW"
+      ],
+      "description": "Synthetic policy for VLAN 42",
+      "destination": {
+        "trafficFilter": {
+          "applicationFilter": {
+            "applicationIds": [
+              7
+            ]
+          },
+          "portFilter": {
+            "items": [
+              {
+                "type": "PORT_NUMBER",
+                "value": 8443
+              }
+            ],
+            "matchOpposite": false,
+            "type": "PORTS"
+          },
+          "type": "APPLICATION"
+        },
+        "zoneId": "bc8dcee5-2686-8d0d-d1aa-c4deeb62eff3"
+      },
+      "enabled": true,
+      "id": "4ac847d6-788b-21e4-6b34-617e108ebd57",
+      "index": 2,
+      "ipProtocolScope": {
+        "ipVersion": "IPV4"
+      },
+      "ipsecFilter": "MATCH_ENCRYPTED",
+      "loggingEnabled": true,
+      "metadata": {
+        "origin": "DERIVED"
+      },
+      "name": "Variant fixture 42",
+      "reportFlowEnabled": true,
+      "schedule": {
+        "mode": "CUSTOM",
+        "repeatOnDays": [
+          "MONDAY"
+        ],
+        "startDate": "2026-11-02",
+        "stopDate": "2026-11-06",
+        "timeFilter": {
+          "startTime": "09:15",
+          "stopTime": "17:45"
+        }
+      },
+      "source": {
+        "trafficFilter": {
+          "ipv6IidFilter": {
+            "ipv6Iid": "fixture-42",
+            "matchOpposite": false
+          },
+          "macAddressFilter": "02:00:00:00:42:11",
+          "portFilter": {
+            "items": [
+              {
+                "type": "PORT_NUMBER",
+                "value": 8443
+              }
+            ],
+            "matchOpposite": false,
+            "type": "PORTS"
+          },
+          "type": "IPV6_IID"
+        },
+        "zoneId": "399a9d65-7c80-4ca0-0c42-9715b3907ce3"
+      }
+    }
+  }
+]

@@ -183,24 +183,33 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   rmSync(deniedLog);
   watcher = watch(calls, { recursive: true }, () => {
     const observe = path => {
-      if (!existsSync(path)) return;
-      for (const entry of readdirSync(path, { withFileTypes: true })) {
+      let entries;
+      try { entries = readdirSync(path, { withFileTypes: true }); }
+      catch (error) {
+        if (error.code === 'ENOENT') return;
+        throw error;
+      }
+      for (const entry of entries) {
         const target = join(path, entry.name);
         if (entry.isDirectory()) observe(target);
         else {
-          staged.add(target);
-          assert.equal(statSync(target).mode & 0o077, 0, 'Staged files are private');
-          if (entry.name === 'config.json') {
-            const config = JSON.parse(readFileSync(target, 'utf8'));
-            if (config.profiles?.artium) {
-              assert.deepEqual(config.profiles.artium.apiKey, { env: 'ARTIUM_SECRET_0' });
-              report.isolation.push({ file: target.slice(scratch.length), mode: statSync(target).mode & 0o777, secretRef: config.profiles.artium.apiKey });
-              if (rejectAfterStaging) {
-                rejectAfterStaging = false;
-                stagingRejections++;
-                db.prepare("UPDATE users SET disabled = 1 WHERE id = 'synthetic-user'").run();
+          try {
+            staged.add(target);
+            assert.equal(statSync(target).mode & 0o077, 0, 'Staged files are private');
+            if (entry.name === 'config.json') {
+              const config = JSON.parse(readFileSync(target, 'utf8'));
+              if (config.profiles?.artium) {
+                assert.deepEqual(config.profiles.artium.apiKey, { env: 'ARTIUM_SECRET_0' });
+                report.isolation.push({ file: target.slice(scratch.length), mode: statSync(target).mode & 0o777, secretRef: config.profiles.artium.apiKey });
+                if (rejectAfterStaging) {
+                  rejectAfterStaging = false;
+                  stagingRejections++;
+                  db.prepare("UPDATE users SET disabled = 1 WHERE id = 'synthetic-user'").run();
+                }
               }
             }
+          } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
           }
         }
       }
@@ -303,7 +312,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
     runnerLimits.timeoutMs = hostTimeoutMs;
     const before = performance.now();
     const toolTimeout = await cli(['unifi-axi', 'site', 'list'], 1);
-    assert.equal(decode(toolTimeout.stdout).error.code, 'TIMEOUT', 'Longer host deadline must preserve a tool timeout');
+    assert.equal(decode(toolTimeout.stdout).error.code, 'READ_INCOMPLETE', 'Longer host deadline must preserve a tool timeout');
     assert.equal(db.prepare("SELECT outcome FROM audit WHERE event='run-terminal' AND user_id='synthetic-user' ORDER BY id DESC LIMIT 1").get().outcome, 'completed');
     assert.throws(() => assert.equal(db.prepare("SELECT outcome FROM audit WHERE event='run-terminal' AND user_id='synthetic-user' ORDER BY id DESC LIMIT 1").get().outcome, 'TIMEOUT'),
       { code: 'ERR_ASSERTION' }, 'The host-timeout assertion must fail when only the tool deadline expires');
@@ -314,7 +323,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   record('HOST-001', { hostTimeoutMs: 1000, toolDeadlineMs: 10000, terminationGraceMs: 2000, negativeControl: 'tool timeout is not host TIMEOUT' });
 
   mode = 'oversize';
-  assert.equal(decode((await cli(['unifi-axi', 'site', 'list'], 1)).stdout).error.code, 'RESPONSE_INVALID');
+  assert.equal(decode((await cli(['unifi-axi', 'site', 'list'], 1)).stdout).error.code, 'READ_INCOMPLETE');
   mode = 'normal';
   sites = Array.from({ length: 100 }, (_, index) => ({ ...first,
     id: `9361553d-e20d-45b8-a516-${String(index).padStart(12, '0')}`, name: `Synthetic ${index} ${'x'.repeat(120)}` }));

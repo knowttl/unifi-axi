@@ -27,9 +27,9 @@ Bare `-v`, `-V` and `--version` print the package version before loading the cat
 Without a profile the home view exits 1 with `PROFILE_REQUIRED` and setup guidance.
 `auth status` resolves protected references offline and reports only profile, origin and source.
 No profiles, an absent named profile, ambiguous selection and an unavailable key produce distinct `PROFILE_REQUIRED`, `PROFILE_NOT_FOUND`, `PROFILE_AMBIGUOUS` and `AUTH_REQUIRED` errors.
-With a configured profile, the home view reads application information and a bounded site list.
+See [Application and sites](#application-and-sites) for the configured home view.
 `doctor` resolves protected credentials, verifies TLS and reads application information only.
-Session setup belongs to a later task.
+Session setup is [explicit and directory-scoped](#optional-integrations).
 
 ## Install
 
@@ -53,6 +53,11 @@ Application information is schema-validated only for known application versions;
 Site responses are validated against the selected contract, including during unverified investigation.
 All writes remain unavailable, including profiles with write permissions enabled.
 
+Running `unifi-axi` with a configured profile returns application and Site Manager versions and at most 25 sites, each with its ID, internal reference and name.
+The result includes the vendor total, truncation metadata and commands that retain profile and site context.
+Use `site list` for the full site listing within the enumeration budgets below.
+Live read output bounds long text to 1,000 characters plus an ellipsis, with original sizes and a `--full` command; full text still redacts secrets and does not expand the home view's site limit.
+
 `site list` enumerates pages and reports exact site UUIDs, internal references, names, returned `count`, `totalCount`, starting `offset` and `complete`.
 It accepts the official `--offset`, `--limit` and `--filter` query flags.
 The default limit is 25 per request; `--limit 0` reads metadata only and reports incomplete when rows remain.
@@ -71,6 +76,26 @@ unifi-axi doctor --profile lab
 unifi-axi site list --profile lab
 unifi-axi --profile lab --site <site-id>
 ```
+
+## Optional integrations
+
+For optional ambient session context, preview an explicit directory-scoped integration:
+
+```sh
+unifi-axi setup --app claude --directory /absolute/project --profile lab
+unifi-axi setup --app claude --directory /absolute/project --profile lab --execute --confirm <digest>
+```
+
+Choose `claude`, `codex` or `opencode`.
+Setup binds the named file-backed profile and configuration path to that directory, preserves unrelated settings and repairs its managed integration.
+Repeat setup for a successful no-op.
+Claude uses `.claude/settings.json`, Codex uses `.codex/hooks.json`, and OpenCode uses `.opencode/plugins/unifi-axi.ts` within the selected directory.
+Codex setup also enables project hooks in `.codex/config.toml`.
+The hook or plugin emits context only when the working directory matches the selected directory.
+Hosted execution denies setup before any filesystem changes.
+Normal read commands install no integrations.
+Alternatively, install the generated static skill exported at `@knowttl/unifi-axi/skill` for on-demand discovery without session hooks.
+The hook and skill are two optional discovery paths; either one is sufficient.
 
 ## Inventory, clients, networks and references
 
@@ -236,29 +261,8 @@ pnpm verify:contracts -- --task B2.1
 
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
 The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
-The default validation prints an explicit skip reason when no frozen Artium fixture is selected.
-
-Running `unifi-axi` with a configured profile returns application context and at most 25 sites.
-The result includes the vendor total, truncation metadata and commands that retain profile and site context.
-Use `site list` for the full site listing.
-Long text is bounded to 1,000 characters with original sizes and a `--full` command; full text still redacts secrets.
-
-For optional ambient session context, preview an explicit directory-scoped integration:
-
-```sh
-unifi-axi setup --app claude --directory /absolute/project --profile lab
-unifi-axi setup --app claude --directory /absolute/project --profile lab --execute --confirm <digest>
-```
-
-Choose `claude`, `codex` or `opencode`.
-Setup binds the named file-backed profile and configuration path to that directory, preserves unrelated settings and repairs its managed integration.
-Repeat setup for a successful no-op.
-Codex setup also enables project hooks in `.codex/config.toml`.
-Hosted execution denies setup before any filesystem changes.
-Normal read commands install no integrations.
-Alternatively, install the generated static skill exported at `@knowttl/unifi-axi/skill` for on-demand discovery without session hooks.
-The hook and skill are two optional discovery paths; either one is sufficient.
 The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
+That command prints an explicit skip reason when no Artium host fixture is selected.
 The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
 Dependency installation may use the npm registry and does not require a pre-seeded pnpm store.
 It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.
@@ -269,8 +273,9 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.9 selectors (for example, `--task B2.9`) and the default implemented suite are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10 selectors (for example, `--task B2.10`) and the default implemented suite are supported now.
 The B2.2-B2.9 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants, policy ordering, ACL/DNS/traffic variants, voucher and Wi-Fi redaction, switching structures and the documented contract gates.
+The B2.10 selector also covers bounded home output, redacted full text and directory-scoped integration preview, confirmation, installation and repeat setup.
 The B2.0 journey adds installed-executable paging, retry, redirect, body-budget and deadline checks plus direct transport concurrency checks against the same synthetic TLS service.
 `verify:contracts` separately exercises schema roots, enum versions, required fields, nullable conflicts and added fields against independently selected synthetic contract fixtures.
 The B1.2a journey reuses the credential suite's synthetic TLS setup and drives installed info, doctor, site list and home against independently seeded HTTPS responses.

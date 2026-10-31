@@ -154,7 +154,7 @@ HTTP 401 is never retried.
 HTTP 429 retries only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
 Redirects are refused without sending credentials to the destination.
 Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
-Response byte-budget failures return `READ_INCOMPLETE`; request deadline failures return `TIMEOUT`, which site enumeration converts to `READ_INCOMPLETE` with progress guidance.
+Response byte-budget failures return `READ_INCOMPLETE`; request deadline failures return `TIMEOUT`, which paginated list enumeration converts to `READ_INCOMPLETE` with progress guidance.
 
 The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
 WAN, VPN and RADIUS changes, UniFi OS backup/restore, firmware upgrades and administrator management are absent from those contracts.

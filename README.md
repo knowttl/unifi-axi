@@ -4,6 +4,8 @@ An agent-facing CLI for the official UniFi Network Integration API.
 Package: `@knowttl/unifi-axi`.
 
 B1.2a adds application version validation, site discovery, doctor and a configured live home to the protected profiles and verified HTTPS transport from B1.2.
+B1.3 adds an opt-in first-read proof through a reviewed, temporary local Artium fixture.
+Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
 `info` and `site list` are implemented with the minimal application and site schemas shared by the two retained contracts.
 The other 71 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
@@ -157,3 +159,19 @@ Native Windows ACL and install evidence remain PENDING on Linux/WSL; injected Wi
 TLS tests generate temporary synthetic CAs, certificates and keys with OpenSSL, exercise accepted and rejected peers, and count HTTP requests at the fake controller.
 No private keys are committed or retained.
 See [retained evidence](evidence/README.md) for original paths and manifest hashes.
+
+The B1.3 Linux proof requires a separate, built Artium fixture descended from revision `3cfc65afc2d7c1a0f50d2f6e02dc2ee13d6fd7e8`, with the reviewed B1.3 delta and current package installed.
+It never edits the shared fixture checkout or connects to a controller.
+
+```text
+pnpm verify:artium --host /absolute/task-owned/artium --output /absolute/external/evidence
+```
+
+The real host CLI talks to the real loopback server, parser, shared v2 profile writer and runner.
+Only task-owned loopback vendor and host ports are reachable through the Node socket guard in the host, client and packaged child.
+The proof checks typed info/sites for both retained versions, competing developer profiles, admission failures before vendor access, read journal classification, cancellation, deadlines, output bounds and private input cleanup.
+The fixture-only input consumer is host evidence and adds no command to the UniFi package.
+The package's request deadline is ten seconds across TLS establishment and HTTP response consumption; its timeout remains distinct from the host's shorter deadline.
+The verifier writes provenance, package integrity, effective limits and native platform results to `artium-proof.json` outside this repository, and removes synthetic TLS keys and scratch state.
+This harness currently uses the native Linux process observer and POSIX host runner.
+Native Windows execution remains PENDING and is a blocking host compatibility gate; WSL or these Linux results cannot pass it.

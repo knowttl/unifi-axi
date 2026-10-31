@@ -18,8 +18,8 @@
     "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "pnpm verify:packaged -- --task B2.0 && pnpm verify:contracts && node --test test/private-file.mjs test/paging.mjs",
-    "check": "pnpm typecheck && pnpm lint && pnpm verify:packaged && pnpm verify:contracts && node --test test/private-file.mjs test/paging.mjs",
+    "test": "pnpm verify:packaged -- --task B2.0 && pnpm verify:contracts && node --test test/private-file.mjs test/paging.mjs test/transport.mjs",
+    "check": "pnpm typecheck && pnpm lint && pnpm verify:packaged && pnpm verify:contracts && node --test test/private-file.mjs test/paging.mjs test/transport.mjs",
     "verify:packaged": "node scripts/verify-packaged.mjs",
     "verify:contracts": "pnpm build && node scripts/verify-contracts.mjs",
     "verify:artium": "node scripts/verify-artium.mjs"

@@ -69,6 +69,10 @@ async function requestJson(profile: Profile, apiKey: string, path: string, expir
     clearTimeout(deadline);
     socket.destroy();
     if (error instanceof ToolError) throw error;
+    if (error instanceof Error && (['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE'].includes((error as NodeJS.ErrnoException).code ?? '') || error.message === 'socket hang up')) {
+      if (retry) throw new Retryable(100);
+      throw new ToolError('TRANSPORT_FAILED', 'API request failed.');
+    }
     throw new ToolError('TLS_REJECTED', 'TLS chain, validity, hostname or peer fingerprint verification failed.');
   }
   const agent = new Agent({ maxSockets: 1 });

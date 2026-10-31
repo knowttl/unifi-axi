@@ -132,6 +132,9 @@ export async function main(args: string[]): Promise<number> {
       bin: executable.startsWith(`${home}/`) || executable.startsWith(`${home}\\`) ? `~${executable.slice(home.length)}` : executable,
       description,
     } : {};
+    const quote = (value: string) => /^[\w./:-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+    let profileContext = values.profile ? ` --profile ${quote(values.profile)}` : '';
+    const configContext = values.config ? ` --config ${quote(values.config)}` : '';
     try {
       const path = configPath(values.config);
       const profiles = new Profiles(path);
@@ -143,6 +146,7 @@ export async function main(args: string[]): Promise<number> {
         return output({ profile: { name: values.profile, configured: true }, config: { path } });
       }
       const selected = await profiles.select(values.profile);
+      if (selected.source === 'file') profileContext = ` --profile ${quote(selected.name)}`;
       const secret = await profiles.secret(selected.profile, redactor);
       if (command === 'auth status') {
         const ref = selected.profile.apiKey;
@@ -162,8 +166,7 @@ export async function main(args: string[]): Promise<number> {
         ...(command === 'doctor' ? { doctor: { credentials: 'resolved', tls: 'verified', application: 'accessible' } } : {}) });
       const listing = await sites(selected.profile, secret, values);
       const requested = values.site ?? selected.profile.siteId;
-      const quote = (value: string) => /^[\w./:-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
-      const context = `${selected.source === 'file' ? ` --profile ${quote(selected.name)}` : ''}${values.config ? ` --config ${quote(values.config)}` : ''}`;
+      const context = `${profileContext}${configContext}`;
       let siteId: string | undefined;
       try {
         if (command === '' || requested !== undefined || listing.sites.length === 1) siteId = selectSite(listing.sites, requested);
@@ -177,9 +180,12 @@ export async function main(args: string[]): Promise<number> {
         help: [`unifi-axi device list${scope}`, `unifi-axi site list${scope}`] });
     } catch (error) {
       const known = error instanceof ToolError;
+      const context = `${profileContext}${configContext}`;
       console.log(redactor.text(encode({ ...identity, ...(api ? { api } : {}), error: { code: known ? error.code : 'CONFIG_INVALID',
         message: known ? error.message : 'Unable to read or write protected configuration.' },
-        help: ['unifi-axi auth status', 'unifi-axi profile configure --profile <name> --file <absolute-profile-json>'] })));
+        help: [`unifi-axi auth status${context}`,
+          `unifi-axi profile configure${profileContext || ' --profile <name>'}${configContext} --file <absolute-profile-json>`,
+          ...(['', 'site list'].includes(command) ? [`unifi-axi site list${context}${values.site ? ` --site ${quote(values.site)}` : ''}`] : [])] })));
       return 1;
     }
   }

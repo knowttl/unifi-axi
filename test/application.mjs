@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 const first = { id: '9361553d-e20d-45b8-a516-6948ab010011', internalReference: 'north', name: 'North lab' };
 const second = { id: '5925a212-9b6e-402b-a675-c658ab010022', internalReference: 'south', name: 'South lab' };
 
+const hintArguments = hint => hint.match(/(?:[^\s'\\]|'[^']*'|\\.)+/g)
+  .map(word => word.replace(/'([^']*)'|\\(.)/g, (_, quoted, escaped) => quoted ?? escaped)).slice(1);
+
 export async function verifyApplication({ cli, configure, trusted, config, seed, requests }) {
   let version = '10.6.109';
   let records = [first, second];
@@ -42,16 +45,28 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
   const selected = await cli(['--profile', 'lab', '--config', config, '--site', second.id], 0,
     { UNIFI_AXI_SITE_ID: first.id });
   assert.equal(selected.selectedSite, second.id, 'Explicit site wins over profile and environment');
-  const hints = selected.help.map(hint => hint.match(/(?:[^\s'\\]|'[^']*'|\\.)+/g)
-    .map(word => word.replace(/'([^']*)'|\\(.)/g, (_, quoted, escaped) => quoted ?? escaped)));
+  const hints = selected.help.map(hintArguments);
   for (const hint of hints) {
-    assert.deepEqual(hint.slice(3), ['--profile', 'lab', '--config', config, '--site', second.id]);
+    assert.deepEqual(hint.slice(2), ['--profile', 'lab', '--config', config, '--site', second.id]);
   }
-  const followup = hints.find(hint => hint[1] === 'site' && hint[2] === 'list').slice(1);
+  const followup = hints.find(hint => hint[0] === 'site' && hint[1] === 'list');
   assert.equal((await cli(followup)).selectedSite, second.id, 'Emitted site-list hint is executable');
   const context = followup.slice(2, -2);
   assert.equal((await cli(['auth', 'status', ...context])).auth.profile, 'lab');
   assert.equal((await cli(['config', 'path', ...context])).config.path, config);
+  for (const command of [[], ['site', 'list']]) {
+    seed(request => request.url.endsWith('/info') ? { applicationVersion: version } : {});
+    const rejected = await cli([...command, '--profile', 'lab', '--config', config, '--site', second.id], 1);
+    assert.equal(rejected.error.code, 'RESPONSE_INVALID');
+    const recovery = rejected.help.map(hintArguments);
+    assert.deepEqual(recovery[0], ['auth', 'status', ...context]);
+    assert.deepEqual(recovery[1], ['profile', 'configure', ...context, '--file', '<absolute-profile-json>']);
+    assert.deepEqual(recovery[2], ['site', 'list', ...context, '--site', second.id]);
+    assert.equal((await cli(recovery[0])).auth.profile, 'lab');
+    assert.equal((await cli(['config', 'path', ...recovery[0].slice(2)])).config.path, config);
+    seed(serve);
+    assert.equal((await cli(recovery[2])).selectedSite, second.id);
+  }
   configure({ lab: { ...profile, apiContract: '10.6.109' } });
   assert.deepEqual((await cli(['info'])).api,
     { applicationVersion: '11.0.97', contract: '11.0.97', status: 'verified', writesAvailable: false },

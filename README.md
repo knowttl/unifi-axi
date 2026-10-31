@@ -7,7 +7,7 @@ B1.2a adds application version validation, site discovery, doctor and a configur
 B1.3 adds an opt-in first-read proof through a reviewed, temporary local Artium fixture.
 Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
-`info` and `site list` are implemented with the minimal application and site schemas shared by the two retained contracts.
+`info` and `site list` validate responses against the selected retained version contract.
 The other 71 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
@@ -42,7 +42,9 @@ All writes remain unavailable, including profiles with write permissions enabled
 `site list` enumerates pages and reports exact site UUIDs, internal references, names, returned `count`, `totalCount`, starting `offset` and `complete`.
 It accepts the official `--offset`, `--limit` and `--filter` query flags.
 The default limit is 25 per request; `--limit 0` reads metadata only and reports incomplete when rows remain.
-Enumeration still unfinished after 100 pages fails with `READ_INCOMPLETE`; malformed or inconsistent pages fail with `RESPONSE_INVALID`.
+Enumeration is bounded to 100 pages, 10,000 rows, eight MiB across responses and thirty seconds.
+Repeated records, stalled offsets, changing totals or exhausted budgets fail with `READ_INCOMPLETE`, including progress and filter guidance.
+Malformed JSON, missing fields and wrong types fail with `RESPONSE_INVALID`.
 An empty result at or beyond `totalCount` reports `count: 0` and `complete: true`, preserving the requested `offset` and upstream `totalCount`.
 
 Select a site with `--site <site-id>`, then the profile's `siteId`, then the sole discovered site.
@@ -111,7 +113,12 @@ Private key PEM, mismatched fingerprints and unknown TLS options are refused.
 The route changes only the TCP destination; the origin remains the TLS name and HTTP Host.
 Chain, validity, hostname and peer pin checks finish before any authenticated HTTP request.
 There is no TLS bypass flag.
-Each API request has a ten-second deadline across TLS establishment and HTTP response consumption.
+Each API request has a ten-second deadline across queueing, TLS establishment, retries and HTTP response consumption.
+At most two reads run concurrently per process.
+Reads retry transport failures and HTTP 502/503/504 at most twice with a 100 ms delay, within that same deadline.
+HTTP 401 is never retried.
+HTTP 429 retries only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
+Redirects are refused without sending credentials to the destination.
 Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
 
 The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
@@ -123,6 +130,23 @@ The command mapping in `src/commands.json` owns command names and their official
 The catalogue derives effects and both versions' parameter, request and response contracts from the [retained OpenAPI sources](evidence/README.md).
 The build generates capability metadata and static skill guidance from it.
 The credential schema ships as `dist/axi-credential.schema.json` with `apiKey` marked `x-secret`.
+
+## Versioned validation
+
+The validation compiler checks the retained source hashes and compiles each version independently without changing its source.
+It supports the validation keywords present in those contracts and rejects unsupported keywords.
+Discriminator dispatch requires the exact mapped tag and validates the selected subtype with its allOf ancestors.
+Ancestor validation suppresses recursive dispatch while nested properties dispatch normally.
+Required fields, nullability and additional-property rules retain their recorded meaning.
+UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI formats remain annotations.
+
+`src/contract-conflicts.json` records all twelve structural conflicts and 180 description-versus-null conflicts with their versions, pointers, source hashes, assigned operations and contract cases.
+The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
+Unresolved conflicts block only the affected command families when their response validators are requested.
+Application and site validation remain available.
+The reviewed PoE resolution in `src/normalization-ledger.json` accepts integer values 1 through 4 only at the recorded 10.6.109 field.
+The corresponding 11.0.97 conflict remains blocked.
+Future resolutions must record source and field hashes, interpretation, reviewer and positive and negative expectations in that ledger.
 
 ## Development and verification
 
@@ -138,6 +162,8 @@ pnpm check
 pnpm verify:packaged -- --task B1.1
 pnpm verify:packaged -- --task B1.2
 pnpm verify:packaged -- --task B1.2a
+pnpm verify:packaged -- --task B2.0
+pnpm verify:contracts -- --task B2.1
 ```
 
 `pnpm check` runs strict types, lint and all implemented packaged obligations.
@@ -151,7 +177,9 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a` and the default implemented suite are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0` and the default implemented suite are supported now.
+The B2.0 journey adds installed-executable paging, retry, redirect, body-budget and deadline checks plus direct transport concurrency checks against the same synthetic TLS service.
+`verify:contracts` separately exercises schema roots, enum versions, required fields, nullable conflicts and added fields against independently selected synthetic contract fixtures.
 The B1.2a journey reuses the credential suite's synthetic TLS setup and drives installed info, doctor, site list and home against independently seeded HTTPS responses.
 Unknown, future, empty and duplicate selectors fail rather than skip.
 Future stage tasks remain unimplemented; a B1.1 pass does not complete B1.

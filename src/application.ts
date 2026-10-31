@@ -2,6 +2,8 @@ import { versions } from './catalogue.js';
 import type { Profile } from './profiles.js';
 import { ToolError } from './security.js';
 import { readJson } from './transport.js';
+import { enumerate } from './paging.js';
+import { validateResponse } from './validation.js';
 
 interface Site { id: string; internalReference: string; name: string }
 interface SitePage { offset: number; limit: number; count: number; totalCount: number; data: Site[] }
@@ -17,53 +19,34 @@ export async function application(profile: Profile, secret: string) {
   if (typeof information.applicationVersion !== 'string') invalid();
   const actual = information.applicationVersion;
   const verified = versions.some(version => version === actual);
+  if (verified) validateResponse(actual, 'OP-001', information);
   return { information, api: { applicationVersion: actual,
     contract: verified ? actual : profile.apiContract ?? null,
     status: verified ? 'verified' : 'unverified', writesAvailable: false } };
 }
 
-// Only the identical info/site schemas in the two shipped contracts are implemented here.
-function sitePage(value: unknown): SitePage {
-  const page = object(value);
+// Schema validation precedes pagination checks on safe local counters.
+function sitePage(page: SitePage): SitePage {
   for (const field of ['offset', 'limit', 'count', 'totalCount']) {
-    if (!Number.isSafeInteger(page[field]) || (page[field] as number) < 0 ||
-      (['limit', 'count'].includes(field) && (page[field] as number) > 2147483647)) invalid();
-  }
-  if (!Array.isArray(page.data)) invalid();
-  for (const value of page.data) {
-    const site = object(value);
-    if (typeof site.id !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(site.id) ||
-      typeof site.internalReference !== 'string' || typeof site.name !== 'string') invalid();
+    const value = page[field as 'offset' | 'limit' | 'count' | 'totalCount'];
+    if (!Number.isSafeInteger(value) || value < 0) invalid();
   }
   if (page.count !== page.data.length) invalid();
-  return page as unknown as SitePage;
+  return page;
 }
 
-export async function sites(profile: Profile, secret: string, values: Record<string, string>) {
+export async function sites(profile: Profile, secret: string, values: Record<string, string>, version: string) {
   const offset = Number(values.offset ?? 0);
   const limit = Number(values.limit ?? 25);
-  const data: Site[] = [];
-  let next = offset;
-  let totalCount: number | undefined;
-  const ids = new Set<string>();
-  for (let pages = 0; pages < 100; pages++) {
+  const result = await enumerate(async (next, budget) => {
     const query = new URLSearchParams({ offset: String(next), limit: String(limit) });
     if (values.filter !== undefined) query.set('filter', values.filter);
-    const page = sitePage(await readJson(profile, secret, `/v1/sites?${query}`));
-    if (page.offset !== next || (totalCount !== undefined && page.totalCount !== totalCount) ||
-      page.count > limit || (page.count > 0 && page.offset + page.count > page.totalCount)) invalid();
-    totalCount = page.totalCount;
-    for (const site of page.data) {
-      if (ids.has(site.id)) invalid();
-      ids.add(site.id);
-      data.push(site);
-    }
-    next += page.count;
-    if (next >= totalCount || limit === 0) return { sites: data, offset, count: data.length, totalCount,
-      complete: next >= totalCount };
-    if (page.count === 0) invalid();
-  }
-  throw new ToolError('READ_INCOMPLETE', 'Site enumeration reached its 100-page bound. Narrow the filter.');
+    const value = await readJson(profile, secret, `/v1/sites?${query}`, budget);
+    validateResponse(version, 'OP-002', value);
+    return sitePage(value as SitePage);
+  }, site => site.id, offset, limit);
+  const { data, ...metadata } = result;
+  return { sites: data, ...metadata };
 }
 
 export function selectSite(data: Site[], explicit?: string): string {

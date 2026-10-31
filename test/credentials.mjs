@@ -7,6 +7,7 @@ import { createServer } from 'node:https';
 import { once } from 'node:events';
 import { decode } from '@toon-format/toon';
 import { verifyApplication } from './application.mjs';
+import { verifyReads } from './reads.mjs';
 
 export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false }) {
   const home = join(temporary, 'credentials');
@@ -172,7 +173,8 @@ Set-Acl -LiteralPath $p -AclObject $acl
   const server = createServer({ key: readFileSync(join(home, 'valid.key')), cert: cert('valid') }, (request, response) => {
     requests.push({ method: request.method, path: request.url, host: request.headers.host, key: request.headers['x-api-key'] });
     response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify(respond(request)));
+    const body = respond(request, response);
+    if (body !== undefined) response.end(JSON.stringify(body));
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -223,6 +225,11 @@ Set-Acl -LiteralPath $p -AclObject $acl
         configure, trusted, config,
         seed: handler => { requests = []; respond = handler; },
         requests: () => requests,
+      });
+      await verifyReads({
+        cli: (args, code = 0) => cli(args, code, keys, false),
+        configure, trusted, installed,
+        seed: handler => { requests = []; respond = handler; }, requests: () => requests,
       });
     }
   } finally {

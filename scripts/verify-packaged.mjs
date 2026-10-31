@@ -10,8 +10,8 @@ import { verifyCredentials } from '../test/credentials.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a'].includes(args[1])),
-  'Only implemented tasks B1.1, B1.2 and B1.2a are selectable. Unknown, future, duplicate or incomplete selectors fail.');
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0'].includes(args[1])),
+  'Only implemented tasks B1.1, B1.2, B1.2a and B2.0 are selectable. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
 const user = join(temporary, 'user');
@@ -178,13 +178,16 @@ try {
   assert.equal(new Set(rows.map(row => row.operation)).size, 73, 'No duplicate or missing results');
   if (args[1] !== 'B1.1') rows.push(...await verifyCredentials({ executable, installed, temporary, env, guard,
     journey: args[1] !== 'B1.2' }));
-  console.log(JSON.stringify({ task: args[1] ?? 'B1.2a', result: 'passed-on-current-platform', platform: process.platform,
+  if (args[1] === undefined || ['B1.2a', 'B2.0'].includes(args[1])) rows.push({ task: 'B2.0', acceptance: 'STEP-B2.0',
+    operation: ['OP-001', 'OP-002'], version: ['10.6.109', '11.0.97'], direction: 'standalone-synthetic', status: 'passed-on-current-platform' });
+  console.log(JSON.stringify({ task: args[1] ?? 'B2.0', result: 'passed-on-current-platform', platform: process.platform,
     nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING', node: process.version,
     packageIntegritySha256: integrity, executable, sourceHashes,
     inputHashes: { catalogue: sha(readFileSync(join(root, 'test/fixtures/catalogue.json'))),
       lockfile: sha(readFileSync(join(root, 'pnpm-lock.yaml'))),
       credentials: sha(readFileSync(join(root, 'test/credentials.mjs'))),
-      application: sha(readFileSync(join(root, 'test/application.mjs'))) },
+      application: sha(readFileSync(join(root, 'test/application.mjs'))),
+      reads: sha(readFileSync(join(root, 'test/reads.mjs'))) },
     timings, rows, futureTasks: 'unimplemented', liveMutationProbes: '32 unrun' }, null, 2));
 } finally {
   rmSync(temporary, { recursive: true, force: true });

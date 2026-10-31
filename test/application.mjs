@@ -130,16 +130,17 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
     assert.equal((await cli(['info'], 1)).error.code, 'RESPONSE_INVALID');
   }
   version = '11.0.97';
-  for (const bad of [
-    {}, { offset: 0, limit: 25, count: 1, totalCount: 1, data: [{ ...first, id: 'not-a-uuid' }] },
-    { offset: 0, limit: 25, count: 1, totalCount: 1, data: [{ id: first.id, name: first.name }] },
-    { offset: 0, limit: 25, count: 0, totalCount: 1, data: [] },
-    { offset: 0, limit: 25, count: 1, totalCount: 0, data: [first] },
-    { offset: 0, limit: 25, count: '1', totalCount: 1, data: [first] },
+  for (const [bad, code] of [
+    [{}, 'RESPONSE_INVALID'],
+    [{ offset: 0, limit: 25, count: 1, totalCount: 1, data: [{ ...first, id: 'not-a-uuid' }] }, 'RESPONSE_INVALID'],
+    [{ offset: 0, limit: 25, count: 1, totalCount: 1, data: [{ id: first.id, name: first.name }] }, 'RESPONSE_INVALID'],
+    [{ offset: 0, limit: 25, count: 0, totalCount: 1, data: [] }, 'READ_INCOMPLETE'],
+    [{ offset: 0, limit: 25, count: 1, totalCount: 0, data: [first] }, 'READ_INCOMPLETE'],
+    [{ offset: 0, limit: 25, count: '1', totalCount: 1, data: [first] }, 'RESPONSE_INVALID'],
   ]) {
     seed(request => request.url.endsWith('/info') ? { applicationVersion: version } : bad);
     const rejected = await cli(['site', 'list'], 1);
-    assert.equal(rejected.error.code, 'RESPONSE_INVALID');
+    assert.equal(rejected.error.code, code);
     assert.equal(rejected.api.applicationVersion, '11.0.97', 'Site failures retain bootstrap version context');
   }
 }

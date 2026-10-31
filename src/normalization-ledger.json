@@ -1,0 +1,22 @@
+{
+  "discriminator": {
+    "interpretation": "Require the exact discriminator mapping tag and validate its selected target, including allOf ancestors. Suppress dispatch only on allOf ancestors. Preserve requiredness, nullability and additionalProperties.",
+    "reviewer": "B2.1 approved implementation specification",
+    "positive": "An exact mapped tag with its complete selected payload passes.",
+    "negative": "An unmapped tag or missing required selected field fails."
+  },
+  "resolutions": [
+    {
+      "id": "CF-001",
+      "version": "10.6.109",
+      "pointer": "#/components/schemas/Port PoE overview/properties/type",
+      "sourceHash": "2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c",
+      "fieldHash": "ae3a613ca502fefc545a23f781fbe07db31c3b13d6f4be3219e70efcb8425bf2",
+      "interpretation": "Validate integer enum [1,2,3,4] at this exact field without coercion or source mutation. No override applies to 11.0.97.",
+      "reviewer": "B2.1 approved PoE resolution",
+      "positive": [1, 2, 3, 4],
+      "negative": ["2", 0, 5]
+    }
+  ],
+  "futureResolutionRequiredFields": ["version", "pointer", "sourceHash", "fieldHash", "interpretation", "reviewer", "positive", "negative"]
+}

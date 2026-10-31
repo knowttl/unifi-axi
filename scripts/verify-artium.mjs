@@ -241,7 +241,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
     [path, sha(readFileSync(join(installed, path)))]));
   report.inventorySha256 = sha(readFileSync(join(host, 'tools/inventories/unifi-axi.json')));
   const packagePath = JSON.parse(readFileSync(join(host, 'tools/package.json'), 'utf8')).dependencies['@knowttl/unifi-axi'].replace(/^file:/, '');
-  report.packageIntegritySha256 = sha(readFileSync(packagePath));
+  report.packageIntegritySha256 = sha(readFileSync(resolve(host, 'tools', packagePath)));
   report.hostLockfileSha256 = sha(readFileSync(join(host, 'tools/pnpm-lock.yaml')));
 
   for (version of ['10.6.109', '11.0.97']) {

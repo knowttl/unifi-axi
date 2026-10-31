@@ -16,6 +16,10 @@ export interface Profile {
 }
 interface Config { version: 1; defaultProfile?: string; profiles: Record<string, Profile> }
 export interface Selection { name: string; source: string; profile: Profile }
+export function writeAllowed(profile: Profile, grants: string[]): boolean {
+  return !/^(1|true)$/i.test(process.env.UNIFI_AXI_READ_ONLY ?? '') && profile.writes?.allowWrites === true &&
+    grants.every(grant => profile.writes!.operations.includes(grant));
+}
 const profileName = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const fields = ['origin', 'apiKey', 'siteId', 'apiContract', 'tls', 'writes'];
 
@@ -46,7 +50,7 @@ export function validateProfile(value: unknown, platform = process.platform): Pr
   if (data.apiContract !== undefined && (typeof data.apiContract !== 'string' || !['10.6.109', '11.0.97'].includes(data.apiContract))) invalid('Unsupported apiContract.');
   if (data.writes !== undefined) {
     const writes = object(data.writes, ['allowWrites', 'operations'], 'writes');
-    if (typeof writes.allowWrites !== 'boolean' || !Array.isArray(writes.operations) || writes.operations.some(op => typeof op !== 'string' || !/^OP-\d{3}$/.test(op))) invalid('writes requires allowWrites and an operations array of operation IDs.');
+    if (typeof writes.allowWrites !== 'boolean' || !Array.isArray(writes.operations) || writes.operations.some(op => typeof op !== 'string' || !/^(?:OP-\d{3}|[A-Za-z][A-Za-z0-9]*(?::[A-Z][A-Z0-9_]*)?)$/.test(op))) invalid('writes requires allowWrites and an operations array of exact vendor operation or variant IDs.');
   }
   if (data.tls !== undefined) {
     const tls = object(data.tls, ['trustedCertificatePem', 'peerFingerprintSha256', 'connectAddress'], 'tls');

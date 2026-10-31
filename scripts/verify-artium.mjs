@@ -38,7 +38,7 @@ const [{ createApp }, { Runner }, { createCredentialStore, openStore }, { Enviro
   'src/server/adapters/unifi.js', 'src/server/adapters/unifi-fixture.js', 'src/server/config.js', 'src/server/auth/local.js',
 ].map(load));
 const { createTestCertificates } = await import(pathToFileURL(join(host, 'test/fake-service/certificates.mjs')));
-const report = { task: 'B1.3', platform: process.platform, osRelease: release(), architecture: arch(), node: process.version,
+const report = { task: 'B3.3', platform: process.platform, osRelease: release(), architecture: arch(), node: process.version,
   nativeWindows: 'PENDING', stockArtium: 'unsupported', fixtureBase: base, fixtureRevision: git('rev-parse', 'HEAD'),
   fixtureDiffSha256: sha(execFileSync('git', ['-C', host, 'diff', base, '--'])), defaultLimits: { ...runnerLimits },
   liveMutationProbes: '32 unrun', rows: [], processObservations: [], isolation: [], runnerEvidence: [],
@@ -296,7 +296,14 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
     [['info', '--origin', 'https://other.invalid'], 'FLAG_BLOCKED'], [['info', '--api-key', 'CANARY-other'], 'FLAG_BLOCKED'],
     ...['route', 'trust', 'journal', 'tls', 'secret-output'].map(flag => [['info', `--${flag}`, 'other'], 'INVALID_INPUT']),
     [['setup'], 'INVALID_INPUT'], [['auth', 'export'], 'INVALID_INPUT'], [['device', 'adopt'], 'INVALID_INPUT'],
+    [['network', 'create'], 'INVALID_INPUT'],
+    [['network', 'create', '--execute', '--confirm', '0'.repeat(64), '--request-id', 'host-custody-denied', '--body-file', '/other'], 'INVALID_INPUT'],
+    [['network', 'delete', '--network-id', first.id, '--execute', '--confirm', '0'.repeat(64), '--request-id', 'host-delete-denied'], 'INVALID_INPUT'],
+    [['write', 'show', '--request-id', 'host-custody-denied'], 'INVALID_INPUT'],
+    [['write', 'reconcile', '--request-id', 'host-custody-denied'], 'INVALID_INPUT'],
   ]) await denied(words, code);
+  record('HOST-005/WRITE-006/STEP-B3.3', { admission: 'hosted-writes-denied',
+    durableCustody: 'absent; read-only fixture cannot admit mutations', mutationRequests: 0 });
   db.prepare("DELETE FROM role_tools WHERE tool = 'unifi-axi'").run();
   await denied(['info'], 'TOOL_NOT_GRANTED');
   db.prepare("INSERT INTO role_tools VALUES ('synthetic-role', 'unifi-axi')").run();

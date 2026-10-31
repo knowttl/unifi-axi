@@ -38,6 +38,17 @@ export async function verifyInventory({ cli, seed }) {
     return handler(url, response);
   });
   for (version of ['10.6.109', '11.0.97']) {
+    // Preserve the published --full read surface admitted by the host fixture.
+    for (const [args, key, expected] of [
+      [['info', '--full'], 'information', { applicationVersion: version }],
+      [['client', 'list', '--site', site, '--full'], 'clients', [client]],
+    ]) {
+      serve(url => {
+        assert.equal(url.pathname, `/proxy/network/integration/v1/sites/${site}/clients`);
+        return { offset: 0, limit: 25, count: 1, totalCount: 1, data: [client] };
+      });
+      assert.deepEqual((await cli(args))[key], expected);
+    }
     for (const [command, path, key, first, next] of families) {
       if (version === '11.0.97' && command.startsWith('device ')) {
         serve(() => ({ offset: 0, limit: 25, count: 0, totalCount: 0, data: [] }));

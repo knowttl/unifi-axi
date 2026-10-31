@@ -1,7 +1,7 @@
 import { versions } from './catalogue.js';
-import type { Profile } from './profiles.js';
+import { writeAllowed, type Profile } from './profiles.js';
 import { ToolError } from './security.js';
-import { readJson } from './transport.js';
+import { readJson, readBudget, type PeerIdentity } from './transport.js';
 import { enumerate } from './paging.js';
 import { validateResponse } from './validation.js';
 
@@ -14,15 +14,16 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export async function application(profile: Profile, secret: string) {
-  const information = object(await readJson(profile, secret, '/v1/info'));
+export async function application(profile: Profile, secret: string, peer?: PeerIdentity) {
+  const information = object(await readJson(profile, secret, '/v1/info', readBudget(), peer));
   if (typeof information.applicationVersion !== 'string') invalid();
   const actual = information.applicationVersion;
   const verified = versions.some(version => version === actual);
   if (verified) validateResponse(actual, 'OP-001', information);
   return { information, api: { applicationVersion: actual,
     contract: verified ? actual : profile.apiContract ?? null,
-    status: verified ? 'verified' : 'unverified', writesAvailable: false } };
+    status: verified ? 'verified' : 'unverified', writesAvailable: verified && process.platform !== 'win32' &&
+      (writeAllowed(profile, ['deleteNetwork']) || writeAllowed(profile, ['createNetwork', 'createNetwork:UNMANAGED'])) } };
 }
 
 // Schema validation precedes pagination checks on safe local counters.
@@ -35,13 +36,15 @@ function sitePage(page: SitePage): SitePage {
   return page;
 }
 
-export async function sites(profile: Profile, secret: string, values: Record<string, string>, version: string, bounded = false) {
+export async function sites(profile: Profile, secret: string, values: Record<string, string>, version: string, boundedOrPeer: boolean | PeerIdentity = false) {
+  const bounded = boundedOrPeer === true;
+  const peer = typeof boundedOrPeer === 'object' ? boundedOrPeer : undefined;
   const offset = Number(values.offset ?? 0);
   const limit = Number(values.limit ?? 25);
   const read = async (next: number, budget?: Parameters<typeof readJson>[3]) => {
     const query = new URLSearchParams({ offset: String(next), limit: String(bounded ? Math.min(limit, 25 - next) : limit) });
     if (values.filter !== undefined) query.set('filter', values.filter);
-    const value = await readJson(profile, secret, `/v1/sites?${query}`, budget);
+    const value = await readJson(profile, secret, `/v1/sites?${query}`, budget, peer);
     validateResponse(version, 'OP-002', value);
     return sitePage(value as SitePage);
   };

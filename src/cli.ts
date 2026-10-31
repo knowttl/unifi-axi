@@ -7,6 +7,7 @@ import { Redactor, ToolError } from './security.js';
 import { application, sites, selectSite } from './application.js';
 import { readOperation } from './reads.js';
 import { setup } from './integrations.js';
+import { foundationWrites, inspectWrite, writeOperation } from './writes.js';
 
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
@@ -15,7 +16,7 @@ const auxiliary = [
     .map(command => ({ command, summary: 'Manage protected credential references offline', status: 'implemented' })),
   { command: 'setup', summary: 'Preview or install directory-scoped session context', status: 'implemented' },
   ...['write show', 'write reconcile']
-    .map(command => ({ command, summary: 'Planned capability', status: 'not-implemented' })),
+    .map(command => ({ command, summary: 'Inspect durable write ownership using reads only', status: 'implemented' })),
 ];
 
 interface Flag {
@@ -61,7 +62,7 @@ export async function main(args: string[]): Promise<number> {
   const extra = auxiliary.find(entry => entry.command === command);
   const children = [...catalogue, ...auxiliary].filter(entry => entry.command.startsWith(`${command} `));
   const flags = flagsFor(operation);
-  if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path'].includes(command)) {
+  if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path', 'write show', 'write reconcile'].includes(command)) {
     flags.push({ name: 'config', type: 'string', required: false }, { name: 'profile', type: 'string', required: false });
   }
   if (['', 'site list'].includes(command)) flags.push({ name: 'site', type: 'string', required: false });
@@ -70,6 +71,7 @@ export async function main(args: string[]): Promise<number> {
   if (command === 'setup') flags.push(...['app', 'directory', 'profile', 'config', 'confirm']
     .map(name => ({ name, type: 'string', required: ['app', 'directory', 'profile'].includes(name) })),
   { name: 'execute', type: 'switch', required: false });
+  if (['write show', 'write reconcile'].includes(command)) flags.push({ name: 'request-id', type: 'string', required: true });
   const seen = new Set<string>();
   const values: Record<string, string> = {};
   const tokens = firstFlag < 0 ? [] : args.slice(firstFlag);
@@ -110,7 +112,7 @@ export async function main(args: string[]): Promise<number> {
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
-        output: operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract; writes unavailable.' : 'No vendor output until implemented. This operation fails before network access.',
+        output: foundationWrites.has(operation.id) ? 'Preview by default. Execution requires exact grants, matching confirmation and a stable request ID. Creation currently supports UNMANAGED networks only.' : operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract.' : 'No vendor output until implemented. This operation fails before network access.',
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
         })), examples: examplesFor(operation) });
@@ -142,9 +144,24 @@ export async function main(args: string[]): Promise<number> {
       help: ['unifi-axi setup --help'] }, 1);
     }
   }
-  if (operation && readOperations.has(operation.id)) {
+  if ((operation && (readOperations.has(operation.id) || foundationWrites.has(operation.id))) || ['write show', 'write reconcile'].includes(command)) {
     const missing = flags.find(flag => flag.required && flag.name !== 'site' && !values[flag.name]);
     if (missing) return usage('INVALID_ARGUMENT', `--${missing.name} is required.`, flags);
+  }
+  if ((operation && foundationWrites.has(operation.id)) || ['write show', 'write reconcile'].includes(command)) {
+    const redactor = new Redactor();
+    try {
+      const profiles = new Profiles(configPath(values.config));
+      const result = operation ? await writeOperation(profiles, values.profile, redactor, operation, values, seen.has('execute')) :
+        await inspectWrite(profiles, values.profile, redactor, values['request-id']!, command === 'write reconcile');
+      console.log(redactor.text(encode(redactor.payload(result) as Parameters<typeof encode>[0])));
+      return 'error' in result ? 1 : 0;
+    } catch (error) {
+      const known = error instanceof ToolError;
+      console.log(redactor.text(encode({ error: { code: known ? error.code : 'WRITE_FAILED',
+        message: known ? error.message : 'Unable to persist or inspect private write ownership. No automatic retry is permitted.' } })));
+      return 1;
+    }
   }
   if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path', 'info', 'site list'].includes(command) || (operation && readOperations.has(operation.id))) {
     const redactor = new Redactor();

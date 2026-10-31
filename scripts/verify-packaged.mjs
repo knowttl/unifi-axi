@@ -11,7 +11,7 @@ import { verifyIntegrations } from '../test/integrations.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9', 'B2.10'].includes(args[1])),
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9', 'B2.10', 'B3.1', 'B3.2', 'B3.3'].includes(args[1])),
   'Select an implemented task. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
@@ -29,9 +29,9 @@ const implemented = ['info', 'site list', 'country list', 'dpi application list'
   'firewall policy list', 'firewall policy order show', 'firewall policy show', 'firewall zone list', 'firewall zone show',
   'hotspot voucher list', 'hotspot voucher show', 'switching lag list', 'switching lag show',
   'switching mc-lag-domain list', 'switching mc-lag-domain show', 'switching switch-stack list', 'switching switch-stack show',
-  'traffic-list list', 'traffic-list show', 'wifi broadcast list', 'wifi broadcast show'];
+  'traffic-list list', 'traffic-list show', 'wifi broadcast list', 'wifi broadcast show', 'network create', 'network delete'];
 const expectedStatus = command => implemented.includes(command) ? 'implemented' : 'not-implemented';
-const detail = ['device show', 'device statistics latest', 'client show', 'network show', 'network references',
+const detail = ['network delete', 'device show', 'device statistics latest', 'client show', 'network show', 'network references',
   'acl-rule show', 'dns policy show', 'firewall policy order show', 'firewall policy show', 'firewall zone show',
   'hotspot voucher show', 'switching lag show', 'switching mc-lag-domain show', 'switching switch-stack show',
   'traffic-list show', 'wifi broadcast show'];
@@ -65,7 +65,7 @@ try {
   assert.equal(archives.length, 1);
   const archive = join(temporary, archives[0]);
   const integrity = sha(readFileSync(archive));
-  command(process.execPath, [pnpmScript, '--dir', prefix, 'add', '--prefer-offline', '--ignore-scripts', '--save-exact', archive]);
+  command(process.execPath, [pnpmScript, '--dir', prefix, 'add', '--offline', '--ignore-scripts', '--save-exact', archive]);
   const installed = join(prefix, 'node_modules/@knowttl/unifi-axi');
   const installedPackage = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
   assert.equal(installedPackage.name, '@knowttl/unifi-axi');
@@ -126,7 +126,7 @@ try {
     const help = decode(cli([...words, '--help']));
     assert.equal(help.command, entry.command);
     if (['write show', 'write reconcile'].includes(entry.command)) {
-      assert.equal(decode(cli(words, 1)).error.code, 'NOT_IMPLEMENTED');
+      assert.equal(decode(cli(words, 2)).error.code, 'INVALID_ARGUMENT');
     }
   }
   for (const [args, code] of [
@@ -191,7 +191,7 @@ try {
   }
   assert.equal(new Set(rows.map(row => row.operation)).size, 73, 'No duplicate or missing results');
   if (args[1] !== 'B1.1') rows.push(...await verifyCredentials({ executable, installed, temporary, env, guard,
-    journey: args[1] !== 'B1.2' }));
+    journey: args[1] !== 'B1.2', writeTask: args[1] === undefined ? 'B3.3' : args[1].startsWith('B3.') ? args[1] : undefined }));
   if (args[1] === undefined || args[1] === 'B2.10') rows.push({ task: 'B2.10', acceptance: 'STEP-B2.10',
     operation: ['OP-001', 'OP-002'], direction: 'standalone-synthetic', status: 'passed-on-current-platform',
     integrations: ['claude', 'codex', 'opencode'], nativeWindows: 'PENDING', liveCommissioning: 'PENDING' });
@@ -204,7 +204,9 @@ try {
       lockfile: sha(readFileSync(join(root, 'pnpm-lock.yaml'))),
       credentials: sha(readFileSync(join(root, 'test/credentials.mjs'))),
       application: sha(readFileSync(join(root, 'test/application.mjs'))),
-      reads: sha(readFileSync(join(root, 'test/reads.mjs'))) },
+      reads: sha(readFileSync(join(root, 'test/reads.mjs'))),
+      writes: sha(readFileSync(join(root, 'test/writes.ts'))),
+      writeGuard: sha(readFileSync(join(root, 'test/fixtures/write-guard.ts'))) },
     timings, rows, futureTasks: 'unimplemented', liveMutationProbes: '32 unrun' }, null, 2));
 } finally {
   rmSync(temporary, { recursive: true, force: true });

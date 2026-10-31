@@ -7,7 +7,7 @@ B1.2a adds application version validation, site discovery, doctor and a configur
 B1.3 adds an opt-in first-read proof through a reviewed, temporary local Artium fixture.
 Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
-`info` and `site list` validate responses against the selected retained version contract.
+`info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
 The other 71 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
@@ -37,6 +37,8 @@ Output identifies the actual application version, selected contract, verificatio
 Known versions 10.6.109 and 11.0.97 select their matching contract, regardless of a profile override.
 An unknown version returns `UNVERIFIED_API_VERSION` after the info read.
 A profile `apiContract` of 10.6.109 or 11.0.97 permits read-only investigation while output remains visibly `unverified` and retains the actual version.
+Application information is schema-validated only for known application versions; unknown versions require an object with a string `applicationVersion` but skip full info validation.
+Site responses are validated against the selected contract, including during unverified investigation.
 All writes remain unavailable, including profiles with write permissions enabled.
 
 `site list` enumerates pages and reports exact site UUIDs, internal references, names, returned `count`, `totalCount`, starting `offset` and `complete`.
@@ -116,6 +118,8 @@ There is no TLS bypass flag.
 Each API request has a ten-second deadline across queueing, TLS establishment, retries and HTTP response consumption.
 At most two reads run concurrently per process.
 Reads retry transport failures and HTTP 502/503/504 at most twice with a 100 ms delay, within that same deadline.
+Before TLS completes, transient connection failures (`ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, `EPIPE` and socket hang-up) are eligible for those retries.
+Certificate chain, validity, hostname and peer pin rejections fail with `TLS_REJECTED` without retrying or sending an authenticated request.
 HTTP 401 is never retried.
 HTTP 429 retries only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
 Redirects are refused without sending credentials to the destination.
@@ -166,7 +170,7 @@ pnpm verify:packaged -- --task B2.0
 pnpm verify:contracts -- --task B2.1
 ```
 
-`pnpm check` runs strict types, lint and all implemented packaged obligations.
+`pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
 The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
 The packaged selector builds and packs the distribution, installs it offline into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
 It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.

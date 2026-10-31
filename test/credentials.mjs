@@ -9,6 +9,7 @@ import { decode } from '@toon-format/toon';
 import { verifyApplication } from './application.mjs';
 import { verifyReads } from './reads.mjs';
 import { verifyInventory } from './inventory.mjs';
+import { verifyPolicies } from './policies.mjs';
 
 export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false }) {
   const inventoryRows = [];
@@ -235,6 +236,10 @@ Set-Acl -LiteralPath $p -AclObject $acl
       });
       configure({ lab: trusted });
       inventoryRows.push(...await verifyInventory({
+        cli: (args, code = 0) => cli(args, code, keys, false),
+        seed: handler => { requests = []; respond = handler; },
+      }));
+      inventoryRows.push(...await verifyPolicies({
         cli: (args, code = 0) => cli(args, code, keys, false),
         seed: handler => { requests = []; respond = handler; },
       }));

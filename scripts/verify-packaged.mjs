@@ -10,7 +10,7 @@ import { verifyCredentials } from '../test/credentials.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5'].includes(args[1])),
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9'].includes(args[1])),
   'Select an implemented task. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
@@ -23,9 +23,17 @@ const sourcePackage = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'
 const expected = JSON.parse(readFileSync(join(root, 'test/fixtures/catalogue.json'), 'utf8'));
 const implemented = ['info', 'site list', 'country list', 'dpi application list', 'dpi category list', 'device pending list',
   'device-tag list', 'radius profile list', 'vpn server list', 'vpn site-to-site-tunnel list', 'wan list',
-  'device list', 'device show', 'device statistics latest', 'client list', 'client show', 'network list', 'network show', 'network references'];
+  'device list', 'device show', 'device statistics latest', 'client list', 'client show', 'network list', 'network show', 'network references',
+  'acl-rule list', 'acl-rule order show', 'acl-rule show', 'dns policy list', 'dns policy show',
+  'firewall policy list', 'firewall policy order show', 'firewall policy show', 'firewall zone list', 'firewall zone show',
+  'hotspot voucher list', 'hotspot voucher show', 'switching lag list', 'switching lag show',
+  'switching mc-lag-domain list', 'switching mc-lag-domain show', 'switching switch-stack list', 'switching switch-stack show',
+  'traffic-list list', 'traffic-list show', 'wifi broadcast list', 'wifi broadcast show'];
 const expectedStatus = command => implemented.includes(command) ? 'implemented' : 'not-implemented';
-const detail = ['device show', 'device statistics latest', 'client show', 'network show', 'network references'];
+const detail = ['device show', 'device statistics latest', 'client show', 'network show', 'network references',
+  'acl-rule show', 'dns policy show', 'firewall policy order show', 'firewall policy show', 'firewall zone show',
+  'hotspot voucher show', 'switching lag show', 'switching mc-lag-domain show', 'switching switch-stack show',
+  'traffic-list show', 'wifi broadcast show'];
 const pnpmScript = process.env.npm_execpath;
 assert.ok(pnpmScript, 'Run this entry through pnpm verify:packaged');
 

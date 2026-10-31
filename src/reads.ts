@@ -12,6 +12,12 @@ const names: Record<string, string> = {
   'OP-021': 'device', 'OP-024': 'statistics', 'OP-048': 'networks', 'OP-051': 'network',
   'OP-053': 'references', 'OP-054': 'radiusProfiles', 'OP-066': 'vpnServers',
   'OP-067': 'vpnTunnels', 'OP-068': 'wans',
+  'OP-007': 'aclRules', 'OP-009': 'aclRuleOrder', 'OP-012': 'aclRule',
+  'OP-025': 'dnsPolicies', 'OP-028': 'dnsPolicy', 'OP-030': 'firewallPolicies',
+  'OP-032': 'firewallPolicyOrder', 'OP-035': 'firewallPolicy', 'OP-038': 'firewallZones', 'OP-041': 'firewallZone',
+  'OP-044': 'vouchers', 'OP-047': 'voucher', 'OP-055': 'lags', 'OP-056': 'lag',
+  'OP-057': 'mcLagDomains', 'OP-058': 'mcLagDomain', 'OP-059': 'switchStacks', 'OP-060': 'switchStack',
+  'OP-061': 'trafficLists', 'OP-064': 'trafficList', 'OP-069': 'wifiBroadcasts', 'OP-072': 'wifiBroadcast',
 };
 
 export async function readOperation(profile: Profile, secret: string, operation: Operation,
@@ -27,13 +33,22 @@ export async function readOperation(profile: Profile, secret: string, operation:
   const read = async (url: string, budget?: Parameters<typeof readJson>[3]) => {
     const result = await readJson(profile, secret, url, budget);
     validateResponse(version, operation.id, result);
+    // Voucher codes are credentials; diagnostic error.code fields stay visible.
+    if (operation.id === 'OP-047') (result as RecordData).code = '[REDACTED]';
+    if (operation.id === 'OP-044') for (const voucher of (result as { data: RecordData[] }).data) voucher.code = '[REDACTED]';
     return result as RecordData;
   };
   const name = names[operation.id]!;
   if (!parameters.some(parameter => parameter.name === 'offset')) {
-    const result = await read(path);
-    const target = values['client-id'] ?? values['device-id'] ?? values['network-id'];
-    if (Object.hasOwn(result, 'id') && result.id !== target) {
+    const query = new URLSearchParams();
+    for (const parameter of parameters.filter(parameter => parameter.in === 'query')) {
+      const value = values[parameterFlag(parameter.name)];
+      if (value !== undefined) query.set(parameter.name, value);
+    }
+    const result = await read(`${path}${query.size ? `?${query}` : ''}`);
+    const targetParameter = parameters.find(parameter => parameter.in === 'path' && parameter.name !== 'siteId');
+    const target = targetParameter ? values[parameterFlag(targetParameter.name)] : undefined;
+    if (target !== undefined && Object.hasOwn(result, 'id') && result.id !== target) {
       throw new ToolError('RESPONSE_INVALID', '/id: response does not match the requested resource.');
     }
     if (operation.id === 'OP-053') {
@@ -46,7 +61,7 @@ export async function readOperation(profile: Profile, secret: string, operation:
     }
     return { [name]: result };
   }
-  const limit = Number(values.limit ?? 25);
+  const limit = Number(values.limit ?? parameters.find(parameter => parameter.name === 'limit')!.schema.default ?? 25);
   const result = await enumerate(async (offset, budget) => {
     const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
     for (const parameter of parameters.filter(parameter => parameter.in === 'query' && !['offset', 'limit'].includes(parameter.name))) {

@@ -8,8 +8,8 @@ B1.3 adds an opt-in first-read proof through a reviewed, temporary local Artium 
 Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
 `info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
-Supporting catalogues, WAN/VPN overviews, devices, clients and networks provide 17 additional read commands.
-The remaining 54 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
+Read coverage includes [inventory and networks](#inventory-clients-networks-and-references) and [policies, vouchers, Wi-Fi and switching](#policies-vouchers-wi-fi-and-switching), subject to the documented contract gates.
+Use `unifi-axi commands` for each operation's implementation status; unimplemented operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
 
@@ -89,6 +89,28 @@ Other null fields must satisfy the original schema; request-side normalization r
 Validation failures include the offending field path without echoing its value.
 The approved 10.6.109 PoE resolution preserves integer values without coercion and rejects strings.
 All 11.0.97 device reads remain blocked with `CONTRACT_CONFLICT` for unresolved CF-007; its integer type and string enum disagree, and no 11.0.97 override is approved.
+
+## Policies, vouchers, Wi-Fi and switching
+
+`acl-rule`, `dns policy`, `traffic-list`, `firewall zone`, `hotspot voucher`, `switching lag`, `switching mc-lag-domain` and `switching switch-stack` provide `list` and `show` reads.
+Use each command's `--help` for its required resource ID flag.
+Lists preserve the vendor order, filters and bounded paging metadata.
+Details preserve nested subtype fields and verify the returned ID against the requested resource.
+Empty switching lists remain empty; missing details return an explicit upstream error.
+
+`acl-rule order show` returns the ordered rule IDs.
+`firewall policy order show` requires both `--source-firewall-zone-id` and `--destination-firewall-zone-id` and returns ordering for that zone pair.
+Zone details include their network IDs.
+Firewall policy `list` and `show` remain gated by unresolved named-protocol conflicts CF-002 through CF-004 on 10.6.109 and CF-008 through CF-010 on 11.0.97.
+Wi-Fi broadcast `show` remains gated by rate enum conflicts CF-005/CF-006 and CF-011/CF-012 respectively.
+These structural conflicts block the reachable response schema even when the affected optional field is absent or a list is empty.
+These reads return `CONTRACT_CONFLICT` diagnostics naming the selected version, conflict IDs and source pointers.
+`wifi broadcast list`, policy ordering and zone reads remain available.
+No source conflict is silently normalized.
+
+Voucher `code` fields and Wi-Fi `passphrase` fields are replaced with `[REDACTED]` in default output.
+Diagnostic `error.code` fields remain visible.
+Voucher lists use the documented default limit of 100; other lists use their documented defaults.
 
 ## Credentials and transport
 
@@ -201,6 +223,7 @@ pnpm verify:contracts -- --task B2.1
 
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
 The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
+The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
 The packaged selector builds and packs the distribution, installs it offline into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
 It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.
 Offline discovery and credential commands run with a fail-closed network attempt recorder; transport checks use a local fake HTTPS controller.
@@ -210,8 +233,8 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, `--task B2.2`, `--task B2.3`, `--task B2.4`, `--task B2.5` and the default implemented suite are supported now.
-The B2.2-B2.5 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants and the retained 11.0.97 device gate.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.9 selectors (for example, `--task B2.9`) and the default implemented suite are supported now.
+The B2.2-B2.9 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants, policy ordering, ACL/DNS/traffic variants, voucher and Wi-Fi redaction, switching structures and the documented contract gates.
 The B2.0 journey adds installed-executable paging, retry, redirect, body-budget and deadline checks plus direct transport concurrency checks against the same synthetic TLS service.
 `verify:contracts` separately exercises schema roots, enum versions, required fields, nullable conflicts and added fields against independently selected synthetic contract fixtures.
 The B1.2a journey reuses the credential suite's synthetic TLS setup and drives installed info, doctor, site list and home against independently seeded HTTPS responses.
@@ -235,7 +258,7 @@ pnpm verify:artium --host /absolute/task-owned/artium --output /absolute/externa
 
 The real host CLI talks to the real loopback server, parser, shared v2 profile writer and runner.
 Only task-owned loopback vendor and host ports are reachable through the Node socket guard in the host, client and packaged child.
-The proof checks typed info/sites and the combined B2.2-B2.5 read journey for both retained versions, competing developer profiles, admission failures before vendor access, read journal classification, cancellation, deadlines, output bounds and private input cleanup.
+The proof checks typed info/sites and the combined read journey described above for both retained versions, competing developer profiles, admission failures before vendor access, read journal classification, cancellation, deadlines, output bounds and private input cleanup.
 The fixture-only input consumer is host evidence and adds no command to the UniFi package.
 The host's shorter deadline remains distinct from the package request deadline described in [Credentials and transport](#credentials-and-transport).
 The verifier writes provenance, package integrity, effective limits and native platform results to `artium-proof.json` outside this repository, and removes synthetic TLS keys and scratch state.

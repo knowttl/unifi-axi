@@ -32,7 +32,9 @@ interface Contract {
 export const versions = ['10.6.109', '11.0.97'] as const;
 
 export const readOperations = new Set(['OP-003', 'OP-004', 'OP-005', 'OP-006', 'OP-014', 'OP-015',
-  'OP-017', 'OP-018', 'OP-021', 'OP-024', 'OP-048', 'OP-051', 'OP-053', 'OP-054', 'OP-066', 'OP-067', 'OP-068']);
+  'OP-017', 'OP-018', 'OP-021', 'OP-024', 'OP-048', 'OP-051', 'OP-053', 'OP-054', 'OP-066', 'OP-067', 'OP-068',
+  'OP-007', 'OP-009', 'OP-012', 'OP-025', 'OP-028', 'OP-030', 'OP-032', 'OP-035', 'OP-038', 'OP-041',
+  'OP-044', 'OP-047', 'OP-055', 'OP-056', 'OP-057', 'OP-058', 'OP-059', 'OP-060', 'OP-061', 'OP-064', 'OP-069', 'OP-072']);
 
 export const contracts = Object.fromEntries(versions.map(version => [version,
   JSON.parse(readFileSync(new URL(`../evidence/sources/network-${version}-openapi.json`, import.meta.url), 'utf8')) as Contract,

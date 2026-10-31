@@ -7,7 +7,7 @@ import { Redactor, ToolError } from './security.js';
 import { application, sites, selectSite } from './application.js';
 import { readOperation } from './reads.js';
 
-const description = 'Read UniFi Network application, inventory and network information.';
+const description = 'Read UniFi Network application, inventory, policies and switching information.';
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
   { command: 'doctor', summary: 'Check protected credentials, TLS and the Network application version', status: 'implemented' },

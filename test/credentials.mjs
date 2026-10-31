@@ -32,6 +32,18 @@ Set-Acl -LiteralPath $p -AclObject $acl
 `], { env: { ...process.env, UNIFI_AXI_FIXTURE_PATH: path }, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
   }
+  function makeWritableByOthers(path) {
+    if (process.platform !== 'win32') { chmodSync(path, 0o666); return; }
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+$ErrorActionPreference='Stop'
+$p=$env:UNIFI_AXI_FIXTURE_PATH
+$acl=Get-Acl -LiteralPath $p
+$sid=[Security.Principal.SecurityIdentifier]::new('S-1-1-0')
+$acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'Write','Allow'))
+Set-Acl -LiteralPath $p -AclObject $acl
+`], { env: { ...process.env, UNIFI_AXI_FIXTURE_PATH: path }, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  }
   const write = (path, value) => { writeFileSync(path, value, { mode: 0o600 }); protectWindows(path); };
   const configure = (profiles = {}, defaultProfile) => write(config, JSON.stringify({ version: 1, profiles, ...(defaultProfile ? { defaultProfile } : {}) }));
   configure();
@@ -177,6 +189,13 @@ Set-Acl -LiteralPath $p -AclObject $acl
     await cli(['info'], 0, {}, false);
     assert.equal(requests[0].key, syntheticKey, 'BOM and trailing whitespace stripped from protected key');
     requests = [];
+    for (const path of [config, secretFile]) {
+      makeWritableByOthers(path);
+      assert.equal((await cli(['info'], 1, {}, false)).error.code, 'CONFIG_INSECURE');
+      assert.equal(requests.length, 0, 'Files writable by another user send zero authenticated HTTP requests');
+      if (process.platform !== 'win32') chmodSync(path, 0o600);
+      protectWindows(path);
+    }
     configure({ untrusted: { origin: `https://127.0.0.1:${port}`, apiKey: source.apiKey } });
     assert.equal((await cli(['info'], 1, keys, false)).error.code, 'TLS_REJECTED');
     assert.equal(requests.length, 0, 'Untrusted chain sends zero authenticated HTTP requests');

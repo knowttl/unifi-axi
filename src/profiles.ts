@@ -77,9 +77,9 @@ export function configPath(explicit?: string, env = process.env, platform = proc
 export class Profiles {
   constructor(readonly path: string, private readonly files = new PrivateFiles(), private readonly env = process.env) {}
 
-  private async load(verifyAcl = false): Promise<Config> {
+  private async load(): Promise<Config> {
     let text: string;
-    try { text = await this.files.read(this.path, false, verifyAcl); } catch (error) {
+    try { text = await this.files.read(this.path); } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, profiles: {} };
       throw error;
     }
@@ -96,13 +96,13 @@ export class Profiles {
 
   async list(): Promise<string[]> { return Object.keys((await this.load()).profiles); }
 
-  async select(explicit?: string, verifyAcl = false): Promise<Selection> {
+  async select(explicit?: string): Promise<Selection> {
     const readOnly = this.env.UNIFI_AXI_READ_ONLY;
     if (readOnly !== undefined && !/^(1|0|true|false)$/i.test(readOnly)) invalid('UNIFI_AXI_READ_ONLY must be 1, 0, true or false.');
     const named = explicit ?? this.env.UNIFI_AXI_PROFILE;
     // Named file profiles never inspect competing environment profile fields.
     if (named !== undefined) {
-      const config = await this.load(verifyAcl);
+      const config = await this.load();
       if (!Object.hasOwn(config.profiles, named)) throw new ToolError('PROFILE_NOT_FOUND', 'Selected profile does not exist.');
       return { name: named, source: 'file', profile: config.profiles[named]! };
     }
@@ -116,17 +116,17 @@ export class Profiles {
       }
       return { name: 'env', source: 'environment', profile: validateProfile(profile) };
     }
-    const config = await this.load(verifyAcl);
+    const config = await this.load();
     const name = config.defaultProfile ?? (Object.keys(config.profiles).length === 1 ? Object.keys(config.profiles)[0] : undefined);
     if (!name) throw new ToolError(Object.keys(config.profiles).length ? 'PROFILE_AMBIGUOUS' : 'PROFILE_REQUIRED', 'Select a profile with --profile or configure a complete environment profile.');
     return { name, source: 'file', profile: config.profiles[name]! };
   }
 
-  async secret(profile: Profile, redactor: Redactor, verifyAcl = false): Promise<string> {
+  async secret(profile: Profile, redactor: Redactor): Promise<string> {
     let value: string | undefined;
     if ('env' in profile.apiKey) value = this.env[profile.apiKey.env];
     else {
-      try { value = (await this.files.read(profile.apiKey.file, true, verifyAcl)).replace(/^\uFEFF/, '').trimEnd(); } catch (error) {
+      try { value = (await this.files.read(profile.apiKey.file, true)).replace(/^\uFEFF/, '').trimEnd(); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
     }
@@ -139,7 +139,7 @@ export class Profiles {
   async configure(name: string, input: string): Promise<void> {
     if (!profileName.test(name)) invalid('Invalid profile name.');
     const profile = validateProfile(json(await this.files.read(input)));
-    const config = await this.load(true);
+    const config = await this.load();
     config.profiles[name] = profile;
     await this.files.write(this.path, `${JSON.stringify(config, null, 2)}\n`);
   }

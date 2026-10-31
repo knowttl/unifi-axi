@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { setTimeout } from 'node:timers/promises';
 import { ToolError } from './security.js';
 
-type AclAction = 'verify' | 'restrict' | 'inspect';
+type AclAction = 'verify' | 'restrict';
 type Acl = (path: string, action: AclAction, directory: boolean) => void;
 
 // Paths travel through the environment, never through PowerShell source interpolation.
@@ -16,7 +16,6 @@ $ErrorActionPreference = 'Stop'
 $p = $env:UNIFI_AXI_PRIVATE_PATH
 $item = Get-Item -LiteralPath $p -Force
 if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse point' }
-if ($env:UNIFI_AXI_ACL_ACTION -eq 'inspect') { exit 0 }
 $user = [Security.Principal.WindowsIdentity]::GetCurrent().User
 $system = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
 $admins = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
@@ -60,11 +59,11 @@ export class PrivateFiles {
     return new ToolError('CONFIG_INSECURE', `Unsafe private file: ${path}. ${this.platform === 'win32' ? 'Re-run profile configure to apply a protected Windows ACL.' : `Use chmod 600 '${path}'.`}`);
   }
 
-  async read(path: string, secret = false, verifyAcl = false): Promise<string> {
+  async read(path: string, secret = false): Promise<string> {
     const before = await lstat(path);
     if (!before.isFile() || before.isSymbolicLink()) throw this.insecure(path);
     if (this.platform === 'win32') {
-      try { this.acl(path, verifyAcl ? 'verify' : 'inspect', false); } catch { throw this.insecure(path); }
+      try { this.acl(path, 'verify', false); } catch { throw this.insecure(path); }
     } else if (before.uid !== process.getuid!() || (before.mode & (secret ? 0o077 : 0o022)) !== 0) {
       throw this.insecure(path);
     }

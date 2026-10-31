@@ -131,8 +131,8 @@ export async function main(args: string[]): Promise<number> {
         await profiles.configure(values.profile, values.file);
         return output({ profile: { name: values.profile, configured: true }, config: { path } });
       }
-      const selected = await profiles.select(values.profile, command === 'auth status');
-      const secret = await profiles.secret(selected.profile, redactor, command === 'auth status');
+      const selected = await profiles.select(values.profile);
+      const secret = await profiles.secret(selected.profile, redactor);
       if (command === 'auth status') {
         const ref = selected.profile.apiKey;
         console.log(redactor.text(encode({ auth: { status: 'configured', profile: selected.name, origin: selected.profile.origin,

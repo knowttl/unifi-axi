@@ -17,7 +17,7 @@ unifi-axi auth status
 unifi-axi --version
 ```
 
-Output is TOON on stdout; errors use structured codes.
+Output is TOON on stdout except for the bare version; errors use structured codes.
 Unknown commands, unknown flags, duplicate flags and invalid scalar values exit 2.
 Bare `-v`, `-V` and `--version` print the package version before loading the catalogue.
 Without a profile the home view exits 1 with `PROFILE_REQUIRED` and setup guidance.
@@ -29,7 +29,8 @@ WAN, VPN and RADIUS changes, UniFi OS backup/restore, firmware upgrades and admi
 SSH and undocumented endpoints are excluded.
 
 For future metadata consumers, the package exports `./catalogue`, `./capabilities` and `./skill`.
-The catalogue owns command names, official operation IDs, effects and both versions' parameter, request and response contracts.
+The command mapping in `src/commands.json` owns command names and their official operation IDs.
+The catalogue derives effects and both versions' parameter, request and response contracts from the [retained OpenAPI sources](evidence/README.md).
 The build generates capability metadata and static skill guidance from it.
 The credential schema will ship with the protected credential implementation in B1.2.
 

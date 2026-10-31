@@ -31,7 +31,7 @@ Live home data, application/site interpretation, doctor and session setup belong
 Use `config path` to find configuration and `profile list` to list its profiles.
 Choose configuration with `--config`, then `UNIFI_AXI_CONFIG`, then the platform default.
 Linux uses an absolute `XDG_CONFIG_HOME` or the runtime home directory under `.config/unifi-axi/config.json`.
-Windows uses `APPDATA\\unifi-axi\\config.json` and protected ACLs.
+Windows uses `APPDATA\unifi-axi\config.json` and protected ACLs.
 Profiles are selected by `--profile`, `UNIFI_AXI_PROFILE`, complete environment profile, default profile, then sole profile.
 An explicit file profile ignores competing environment profile fields.
 A partial environment profile fails with `CONFIG_INVALID`.
@@ -58,7 +58,9 @@ Write execution and `UNIFI_AXI_WRITE_LOG` custody arrive in later tasks; this ve
 Inline secret values and secret flags are refused.
 File keys lose a leading BOM and trailing whitespace.
 Linux checks ownership and permissions before reading; secret files require owner-only permissions and configs cannot be group- or world-writable.
-Windows refuses UNC/device paths and reparse points; `auth status` also verifies protected ACL grants.
+Windows refuses UNC/device secret references and reparse points.
+On Windows, every config, configure-input and secret-file read verifies current-user ownership and a protected ACL with explicit FullControl grants only to the current user, SYSTEM and Administrators, requiring all three.
+Unsafe files fail with `CONFIG_INSECURE` before any authenticated HTTP request.
 No credential store or token cache is created.
 
 To configure a profile, put one profile object containing references in a protected JSON file, then run:

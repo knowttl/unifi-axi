@@ -1,0 +1,586 @@
+[
+  {
+    "id": "OP-001",
+    "command": "info",
+    "vendorOperationId": "getInfo",
+    "method": "GET",
+    "path": "/v1/info",
+    "effect": "read"
+  },
+  {
+    "id": "OP-002",
+    "command": "site list",
+    "vendorOperationId": "getSiteOverviewPage",
+    "method": "GET",
+    "path": "/v1/sites",
+    "effect": "read"
+  },
+  {
+    "id": "OP-003",
+    "command": "country list",
+    "vendorOperationId": "getCountries",
+    "method": "GET",
+    "path": "/v1/countries",
+    "effect": "read"
+  },
+  {
+    "id": "OP-004",
+    "command": "dpi application list",
+    "vendorOperationId": "getDpiApplications",
+    "method": "GET",
+    "path": "/v1/dpi/applications",
+    "effect": "read"
+  },
+  {
+    "id": "OP-005",
+    "command": "dpi category list",
+    "vendorOperationId": "getDpiApplicationCategories",
+    "method": "GET",
+    "path": "/v1/dpi/categories",
+    "effect": "read"
+  },
+  {
+    "id": "OP-006",
+    "command": "device pending list",
+    "vendorOperationId": "getPendingDevicePage",
+    "method": "GET",
+    "path": "/v1/pending-devices",
+    "effect": "read"
+  },
+  {
+    "id": "OP-007",
+    "command": "acl-rule list",
+    "vendorOperationId": "getAclRulePage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/acl-rules",
+    "effect": "read"
+  },
+  {
+    "id": "OP-008",
+    "command": "acl-rule create",
+    "vendorOperationId": "createAclRule",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/acl-rules",
+    "effect": "write"
+  },
+  {
+    "id": "OP-009",
+    "command": "acl-rule order show",
+    "vendorOperationId": "getAclRuleOrdering",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/acl-rules/ordering",
+    "effect": "read"
+  },
+  {
+    "id": "OP-010",
+    "command": "acl-rule order set",
+    "vendorOperationId": "updateAclRuleOrdering",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/acl-rules/ordering",
+    "effect": "write"
+  },
+  {
+    "id": "OP-011",
+    "command": "acl-rule delete",
+    "vendorOperationId": "deleteAclRule",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/acl-rules/{aclRuleId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-012",
+    "command": "acl-rule show",
+    "vendorOperationId": "getAclRule",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/acl-rules/{aclRuleId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-013",
+    "command": "acl-rule update",
+    "vendorOperationId": "updateAclRule",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/acl-rules/{aclRuleId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-014",
+    "command": "client list",
+    "vendorOperationId": "getConnectedClientOverviewPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/clients",
+    "effect": "read"
+  },
+  {
+    "id": "OP-015",
+    "command": "client show",
+    "vendorOperationId": "getConnectedClientDetails",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/clients/{clientId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-016",
+    "command": "client action",
+    "vendorOperationId": "executeConnectedClientAction",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/clients/{clientId}/actions",
+    "effect": "write"
+  },
+  {
+    "id": "OP-017",
+    "command": "device-tag list",
+    "vendorOperationId": "getDeviceTagPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/device-tags",
+    "effect": "read"
+  },
+  {
+    "id": "OP-018",
+    "command": "device list",
+    "vendorOperationId": "getAdoptedDeviceOverviewPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/devices",
+    "effect": "read"
+  },
+  {
+    "id": "OP-019",
+    "command": "device adopt",
+    "vendorOperationId": "adoptDevice",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/devices",
+    "effect": "write"
+  },
+  {
+    "id": "OP-020",
+    "command": "device remove",
+    "vendorOperationId": "removeDevice",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/devices/{deviceId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-021",
+    "command": "device show",
+    "vendorOperationId": "getAdoptedDeviceDetails",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/devices/{deviceId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-022",
+    "command": "device action",
+    "vendorOperationId": "executeAdoptedDeviceAction",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/devices/{deviceId}/actions",
+    "effect": "write"
+  },
+  {
+    "id": "OP-023",
+    "command": "device interfaces ports action",
+    "vendorOperationId": "executePortAction",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/devices/{deviceId}/interfaces/ports/{portIdx}/actions",
+    "effect": "write"
+  },
+  {
+    "id": "OP-024",
+    "command": "device statistics latest",
+    "vendorOperationId": "getAdoptedDeviceLatestStatistics",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/devices/{deviceId}/statistics/latest",
+    "effect": "read"
+  },
+  {
+    "id": "OP-025",
+    "command": "dns policy list",
+    "vendorOperationId": "getDnsPolicyPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/dns/policies",
+    "effect": "read"
+  },
+  {
+    "id": "OP-026",
+    "command": "dns policy create",
+    "vendorOperationId": "createDnsPolicy",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/dns/policies",
+    "effect": "write"
+  },
+  {
+    "id": "OP-027",
+    "command": "dns policy delete",
+    "vendorOperationId": "deleteDnsPolicy",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/dns/policies/{dnsPolicyId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-028",
+    "command": "dns policy show",
+    "vendorOperationId": "getDnsPolicy",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/dns/policies/{dnsPolicyId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-029",
+    "command": "dns policy update",
+    "vendorOperationId": "updateDnsPolicy",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/dns/policies/{dnsPolicyId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-030",
+    "command": "firewall policy list",
+    "vendorOperationId": "getFirewallPolicies",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/firewall/policies",
+    "effect": "read"
+  },
+  {
+    "id": "OP-031",
+    "command": "firewall policy create",
+    "vendorOperationId": "createFirewallPolicy",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/firewall/policies",
+    "effect": "write"
+  },
+  {
+    "id": "OP-032",
+    "command": "firewall policy order show",
+    "vendorOperationId": "getFirewallPolicyOrdering",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/firewall/policies/ordering",
+    "effect": "read"
+  },
+  {
+    "id": "OP-033",
+    "command": "firewall policy order set",
+    "vendorOperationId": "updateFirewallPolicyOrdering",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/firewall/policies/ordering",
+    "effect": "write"
+  },
+  {
+    "id": "OP-034",
+    "command": "firewall policy delete",
+    "vendorOperationId": "deleteFirewallPolicy",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/firewall/policies/{firewallPolicyId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-035",
+    "command": "firewall policy show",
+    "vendorOperationId": "getFirewallPolicy",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/firewall/policies/{firewallPolicyId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-036",
+    "command": "firewall policy patch",
+    "vendorOperationId": "patchFirewallPolicy",
+    "method": "PATCH",
+    "path": "/v1/sites/{siteId}/firewall/policies/{firewallPolicyId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-037",
+    "command": "firewall policy update",
+    "vendorOperationId": "updateFirewallPolicy",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/firewall/policies/{firewallPolicyId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-038",
+    "command": "firewall zone list",
+    "vendorOperationId": "getFirewallZones",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/firewall/zones",
+    "effect": "read"
+  },
+  {
+    "id": "OP-039",
+    "command": "firewall zone create",
+    "vendorOperationId": "createFirewallZone",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/firewall/zones",
+    "effect": "write"
+  },
+  {
+    "id": "OP-040",
+    "command": "firewall zone delete",
+    "vendorOperationId": "deleteFirewallZone",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/firewall/zones/{firewallZoneId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-041",
+    "command": "firewall zone show",
+    "vendorOperationId": "getFirewallZone",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/firewall/zones/{firewallZoneId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-042",
+    "command": "firewall zone update",
+    "vendorOperationId": "updateFirewallZone",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/firewall/zones/{firewallZoneId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-043",
+    "command": "hotspot voucher delete-many",
+    "vendorOperationId": "deleteVouchers",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/hotspot/vouchers",
+    "effect": "write"
+  },
+  {
+    "id": "OP-044",
+    "command": "hotspot voucher list",
+    "vendorOperationId": "getVouchers",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/hotspot/vouchers",
+    "effect": "read"
+  },
+  {
+    "id": "OP-045",
+    "command": "hotspot voucher create",
+    "vendorOperationId": "createVouchers",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/hotspot/vouchers",
+    "effect": "write"
+  },
+  {
+    "id": "OP-046",
+    "command": "hotspot voucher delete",
+    "vendorOperationId": "deleteVoucher",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/hotspot/vouchers/{voucherId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-047",
+    "command": "hotspot voucher show",
+    "vendorOperationId": "getVoucher",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/hotspot/vouchers/{voucherId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-048",
+    "command": "network list",
+    "vendorOperationId": "getNetworksOverviewPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/networks",
+    "effect": "read"
+  },
+  {
+    "id": "OP-049",
+    "command": "network create",
+    "vendorOperationId": "createNetwork",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/networks",
+    "effect": "write"
+  },
+  {
+    "id": "OP-050",
+    "command": "network delete",
+    "vendorOperationId": "deleteNetwork",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/networks/{networkId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-051",
+    "command": "network show",
+    "vendorOperationId": "getNetworkDetails",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/networks/{networkId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-052",
+    "command": "network update",
+    "vendorOperationId": "updateNetwork",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/networks/{networkId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-053",
+    "command": "network references",
+    "vendorOperationId": "getNetworkReferences",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/networks/{networkId}/references",
+    "effect": "read"
+  },
+  {
+    "id": "OP-054",
+    "command": "radius profile list",
+    "vendorOperationId": "getRadiusProfileOverviewPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/radius/profiles",
+    "effect": "read"
+  },
+  {
+    "id": "OP-055",
+    "command": "switching lag list",
+    "vendorOperationId": "getLagPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/switching/lags",
+    "effect": "read"
+  },
+  {
+    "id": "OP-056",
+    "command": "switching lag show",
+    "vendorOperationId": "getLag",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/switching/lags/{lagId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-057",
+    "command": "switching mc-lag-domain list",
+    "vendorOperationId": "getMcLagDomainPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/switching/mc-lag-domains",
+    "effect": "read"
+  },
+  {
+    "id": "OP-058",
+    "command": "switching mc-lag-domain show",
+    "vendorOperationId": "getMcLagDomain",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/switching/mc-lag-domains/{mcLagDomainId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-059",
+    "command": "switching switch-stack list",
+    "vendorOperationId": "getSwitchStackPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/switching/switch-stacks",
+    "effect": "read"
+  },
+  {
+    "id": "OP-060",
+    "command": "switching switch-stack show",
+    "vendorOperationId": "getSwitchStack",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/switching/switch-stacks/{switchStackId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-061",
+    "command": "traffic-list list",
+    "vendorOperationId": "getTrafficMatchingLists",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/traffic-matching-lists",
+    "effect": "read"
+  },
+  {
+    "id": "OP-062",
+    "command": "traffic-list create",
+    "vendorOperationId": "createTrafficMatchingList",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/traffic-matching-lists",
+    "effect": "write"
+  },
+  {
+    "id": "OP-063",
+    "command": "traffic-list delete",
+    "vendorOperationId": "deleteTrafficMatchingList",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/traffic-matching-lists/{trafficMatchingListId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-064",
+    "command": "traffic-list show",
+    "vendorOperationId": "getTrafficMatchingList",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/traffic-matching-lists/{trafficMatchingListId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-065",
+    "command": "traffic-list update",
+    "vendorOperationId": "updateTrafficMatchingList",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/traffic-matching-lists/{trafficMatchingListId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-066",
+    "command": "vpn server list",
+    "vendorOperationId": "getVpnServerPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/vpn/servers",
+    "effect": "read"
+  },
+  {
+    "id": "OP-067",
+    "command": "vpn site-to-site-tunnel list",
+    "vendorOperationId": "getSiteToSiteVpnTunnelPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/vpn/site-to-site-tunnels",
+    "effect": "read"
+  },
+  {
+    "id": "OP-068",
+    "command": "wan list",
+    "vendorOperationId": "getWansOverviewPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/wans",
+    "effect": "read"
+  },
+  {
+    "id": "OP-069",
+    "command": "wifi broadcast list",
+    "vendorOperationId": "getWifiBroadcastPage",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/wifi/broadcasts",
+    "effect": "read"
+  },
+  {
+    "id": "OP-070",
+    "command": "wifi broadcast create",
+    "vendorOperationId": "createWifiBroadcast",
+    "method": "POST",
+    "path": "/v1/sites/{siteId}/wifi/broadcasts",
+    "effect": "write"
+  },
+  {
+    "id": "OP-071",
+    "command": "wifi broadcast delete",
+    "vendorOperationId": "deleteWifiBroadcast",
+    "method": "DELETE",
+    "path": "/v1/sites/{siteId}/wifi/broadcasts/{wifiBroadcastId}",
+    "effect": "write"
+  },
+  {
+    "id": "OP-072",
+    "command": "wifi broadcast show",
+    "vendorOperationId": "getWifiBroadcastDetails",
+    "method": "GET",
+    "path": "/v1/sites/{siteId}/wifi/broadcasts/{wifiBroadcastId}",
+    "effect": "read"
+  },
+  {
+    "id": "OP-073",
+    "command": "wifi broadcast update",
+    "vendorOperationId": "updateWifiBroadcast",
+    "method": "PUT",
+    "path": "/v1/sites/{siteId}/wifi/broadcasts/{wifiBroadcastId}",
+    "effect": "write"
+  }
+]

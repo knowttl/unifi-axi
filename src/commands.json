@@ -1,0 +1,367 @@
+[
+  {
+    "id": "OP-001",
+    "command": "info",
+    "vendorOperationId": "getInfo"
+  },
+  {
+    "id": "OP-002",
+    "command": "site list",
+    "vendorOperationId": "getSiteOverviewPage"
+  },
+  {
+    "id": "OP-003",
+    "command": "country list",
+    "vendorOperationId": "getCountries"
+  },
+  {
+    "id": "OP-004",
+    "command": "dpi application list",
+    "vendorOperationId": "getDpiApplications"
+  },
+  {
+    "id": "OP-005",
+    "command": "dpi category list",
+    "vendorOperationId": "getDpiApplicationCategories"
+  },
+  {
+    "id": "OP-006",
+    "command": "device pending list",
+    "vendorOperationId": "getPendingDevicePage"
+  },
+  {
+    "id": "OP-007",
+    "command": "acl-rule list",
+    "vendorOperationId": "getAclRulePage"
+  },
+  {
+    "id": "OP-008",
+    "command": "acl-rule create",
+    "vendorOperationId": "createAclRule"
+  },
+  {
+    "id": "OP-009",
+    "command": "acl-rule order show",
+    "vendorOperationId": "getAclRuleOrdering"
+  },
+  {
+    "id": "OP-010",
+    "command": "acl-rule order set",
+    "vendorOperationId": "updateAclRuleOrdering"
+  },
+  {
+    "id": "OP-011",
+    "command": "acl-rule delete",
+    "vendorOperationId": "deleteAclRule"
+  },
+  {
+    "id": "OP-012",
+    "command": "acl-rule show",
+    "vendorOperationId": "getAclRule"
+  },
+  {
+    "id": "OP-013",
+    "command": "acl-rule update",
+    "vendorOperationId": "updateAclRule"
+  },
+  {
+    "id": "OP-014",
+    "command": "client list",
+    "vendorOperationId": "getConnectedClientOverviewPage"
+  },
+  {
+    "id": "OP-015",
+    "command": "client show",
+    "vendorOperationId": "getConnectedClientDetails"
+  },
+  {
+    "id": "OP-016",
+    "command": "client action",
+    "vendorOperationId": "executeConnectedClientAction"
+  },
+  {
+    "id": "OP-017",
+    "command": "device-tag list",
+    "vendorOperationId": "getDeviceTagPage"
+  },
+  {
+    "id": "OP-018",
+    "command": "device list",
+    "vendorOperationId": "getAdoptedDeviceOverviewPage"
+  },
+  {
+    "id": "OP-019",
+    "command": "device adopt",
+    "vendorOperationId": "adoptDevice"
+  },
+  {
+    "id": "OP-020",
+    "command": "device remove",
+    "vendorOperationId": "removeDevice"
+  },
+  {
+    "id": "OP-021",
+    "command": "device show",
+    "vendorOperationId": "getAdoptedDeviceDetails"
+  },
+  {
+    "id": "OP-022",
+    "command": "device action",
+    "vendorOperationId": "executeAdoptedDeviceAction"
+  },
+  {
+    "id": "OP-023",
+    "command": "device interfaces ports action",
+    "vendorOperationId": "executePortAction"
+  },
+  {
+    "id": "OP-024",
+    "command": "device statistics latest",
+    "vendorOperationId": "getAdoptedDeviceLatestStatistics"
+  },
+  {
+    "id": "OP-025",
+    "command": "dns policy list",
+    "vendorOperationId": "getDnsPolicyPage"
+  },
+  {
+    "id": "OP-026",
+    "command": "dns policy create",
+    "vendorOperationId": "createDnsPolicy"
+  },
+  {
+    "id": "OP-027",
+    "command": "dns policy delete",
+    "vendorOperationId": "deleteDnsPolicy"
+  },
+  {
+    "id": "OP-028",
+    "command": "dns policy show",
+    "vendorOperationId": "getDnsPolicy"
+  },
+  {
+    "id": "OP-029",
+    "command": "dns policy update",
+    "vendorOperationId": "updateDnsPolicy"
+  },
+  {
+    "id": "OP-030",
+    "command": "firewall policy list",
+    "vendorOperationId": "getFirewallPolicies"
+  },
+  {
+    "id": "OP-031",
+    "command": "firewall policy create",
+    "vendorOperationId": "createFirewallPolicy"
+  },
+  {
+    "id": "OP-032",
+    "command": "firewall policy order show",
+    "vendorOperationId": "getFirewallPolicyOrdering"
+  },
+  {
+    "id": "OP-033",
+    "command": "firewall policy order set",
+    "vendorOperationId": "updateFirewallPolicyOrdering"
+  },
+  {
+    "id": "OP-034",
+    "command": "firewall policy delete",
+    "vendorOperationId": "deleteFirewallPolicy"
+  },
+  {
+    "id": "OP-035",
+    "command": "firewall policy show",
+    "vendorOperationId": "getFirewallPolicy"
+  },
+  {
+    "id": "OP-036",
+    "command": "firewall policy patch",
+    "vendorOperationId": "patchFirewallPolicy"
+  },
+  {
+    "id": "OP-037",
+    "command": "firewall policy update",
+    "vendorOperationId": "updateFirewallPolicy"
+  },
+  {
+    "id": "OP-038",
+    "command": "firewall zone list",
+    "vendorOperationId": "getFirewallZones"
+  },
+  {
+    "id": "OP-039",
+    "command": "firewall zone create",
+    "vendorOperationId": "createFirewallZone"
+  },
+  {
+    "id": "OP-040",
+    "command": "firewall zone delete",
+    "vendorOperationId": "deleteFirewallZone"
+  },
+  {
+    "id": "OP-041",
+    "command": "firewall zone show",
+    "vendorOperationId": "getFirewallZone"
+  },
+  {
+    "id": "OP-042",
+    "command": "firewall zone update",
+    "vendorOperationId": "updateFirewallZone"
+  },
+  {
+    "id": "OP-043",
+    "command": "hotspot voucher delete-many",
+    "vendorOperationId": "deleteVouchers"
+  },
+  {
+    "id": "OP-044",
+    "command": "hotspot voucher list",
+    "vendorOperationId": "getVouchers"
+  },
+  {
+    "id": "OP-045",
+    "command": "hotspot voucher create",
+    "vendorOperationId": "createVouchers"
+  },
+  {
+    "id": "OP-046",
+    "command": "hotspot voucher delete",
+    "vendorOperationId": "deleteVoucher"
+  },
+  {
+    "id": "OP-047",
+    "command": "hotspot voucher show",
+    "vendorOperationId": "getVoucher"
+  },
+  {
+    "id": "OP-048",
+    "command": "network list",
+    "vendorOperationId": "getNetworksOverviewPage"
+  },
+  {
+    "id": "OP-049",
+    "command": "network create",
+    "vendorOperationId": "createNetwork"
+  },
+  {
+    "id": "OP-050",
+    "command": "network delete",
+    "vendorOperationId": "deleteNetwork"
+  },
+  {
+    "id": "OP-051",
+    "command": "network show",
+    "vendorOperationId": "getNetworkDetails"
+  },
+  {
+    "id": "OP-052",
+    "command": "network update",
+    "vendorOperationId": "updateNetwork"
+  },
+  {
+    "id": "OP-053",
+    "command": "network references",
+    "vendorOperationId": "getNetworkReferences"
+  },
+  {
+    "id": "OP-054",
+    "command": "radius profile list",
+    "vendorOperationId": "getRadiusProfileOverviewPage"
+  },
+  {
+    "id": "OP-055",
+    "command": "switching lag list",
+    "vendorOperationId": "getLagPage"
+  },
+  {
+    "id": "OP-056",
+    "command": "switching lag show",
+    "vendorOperationId": "getLag"
+  },
+  {
+    "id": "OP-057",
+    "command": "switching mc-lag-domain list",
+    "vendorOperationId": "getMcLagDomainPage"
+  },
+  {
+    "id": "OP-058",
+    "command": "switching mc-lag-domain show",
+    "vendorOperationId": "getMcLagDomain"
+  },
+  {
+    "id": "OP-059",
+    "command": "switching switch-stack list",
+    "vendorOperationId": "getSwitchStackPage"
+  },
+  {
+    "id": "OP-060",
+    "command": "switching switch-stack show",
+    "vendorOperationId": "getSwitchStack"
+  },
+  {
+    "id": "OP-061",
+    "command": "traffic-list list",
+    "vendorOperationId": "getTrafficMatchingLists"
+  },
+  {
+    "id": "OP-062",
+    "command": "traffic-list create",
+    "vendorOperationId": "createTrafficMatchingList"
+  },
+  {
+    "id": "OP-063",
+    "command": "traffic-list delete",
+    "vendorOperationId": "deleteTrafficMatchingList"
+  },
+  {
+    "id": "OP-064",
+    "command": "traffic-list show",
+    "vendorOperationId": "getTrafficMatchingList"
+  },
+  {
+    "id": "OP-065",
+    "command": "traffic-list update",
+    "vendorOperationId": "updateTrafficMatchingList"
+  },
+  {
+    "id": "OP-066",
+    "command": "vpn server list",
+    "vendorOperationId": "getVpnServerPage"
+  },
+  {
+    "id": "OP-067",
+    "command": "vpn site-to-site-tunnel list",
+    "vendorOperationId": "getSiteToSiteVpnTunnelPage"
+  },
+  {
+    "id": "OP-068",
+    "command": "wan list",
+    "vendorOperationId": "getWansOverviewPage"
+  },
+  {
+    "id": "OP-069",
+    "command": "wifi broadcast list",
+    "vendorOperationId": "getWifiBroadcastPage"
+  },
+  {
+    "id": "OP-070",
+    "command": "wifi broadcast create",
+    "vendorOperationId": "createWifiBroadcast"
+  },
+  {
+    "id": "OP-071",
+    "command": "wifi broadcast delete",
+    "vendorOperationId": "deleteWifiBroadcast"
+  },
+  {
+    "id": "OP-072",
+    "command": "wifi broadcast show",
+    "vendorOperationId": "getWifiBroadcastDetails"
+  },
+  {
+    "id": "OP-073",
+    "command": "wifi broadcast update",
+    "vendorOperationId": "updateWifiBroadcast"
+  }
+]

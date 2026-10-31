@@ -1,0 +1,31 @@
+{
+  "name": "@knowttl/unifi-axi",
+  "version": "0.1.0",
+  "description": "Offline command catalogue for the UniFi Network Integration API",
+  "type": "module",
+  "bin": { "unifi-axi": "dist/bin.js" },
+  "exports": {
+    "./catalogue": "./dist/catalogue.js",
+    "./capabilities": "./dist/capabilities.json",
+    "./skill": "./dist/SKILL.md"
+  },
+  "files": ["dist", "evidence/sources"],
+  "engines": { "node": ">=24.11.0" },
+  "packageManager": "pnpm@10.34.6",
+  "scripts": {
+    "build": "tsc && node scripts/metadata.mjs",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "pnpm verify:packaged -- --task B1.1",
+    "check": "pnpm typecheck && pnpm lint && pnpm verify:packaged",
+    "verify:packaged": "node scripts/verify-packaged.mjs"
+  },
+  "dependencies": { "@toon-format/toon": "2.3.1" },
+  "devDependencies": {
+    "@types/node": "24.10.0",
+    "eslint": "9.39.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.3"
+  }
+}

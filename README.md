@@ -69,6 +69,7 @@ These lists use the same bounded paging and completeness metadata as `site list`
 Filters are forwarded unchanged where the documented operation accepts them; WAN does not accept a filter.
 Country codes and numeric DPI IDs keep their original types.
 WAN and VPN output contains documented overview fields only.
+VPN `metadata.source` is returned only for `DERIVED` site-to-site tunnels.
 Missing totals or invalid page shapes fail with `RESPONSE_INVALID` instead of claiming completeness.
 
 `device show --device-id <id>`, `device statistics latest --device-id <id>`, `client show --client-id <id>` and `network show --network-id <id>` address the exact selected resource.
@@ -86,7 +87,6 @@ Responses preserve gateway, switch and unmanaged network fields and validate the
 Response-side NORM-001 accepts omitted or explicit null `dhcpGuarding` as disabled, preserving null in output.
 Other null fields must satisfy the original schema; request-side normalization remains unavailable.
 Validation failures include the offending field path without echoing its value.
-Structural conflicts block only reachable response schemas, except the retained 11.0.97 device-family gate.
 The approved 10.6.109 PoE resolution preserves integer values without coercion and rejects strings.
 All 11.0.97 device reads remain blocked with `CONTRACT_CONFLICT` for unresolved CF-007; its integer type and string enum disagree, and no 11.0.97 override is approved.
 
@@ -171,14 +171,15 @@ The credential schema ships as `dist/axi-credential.schema.json` with `apiKey` m
 The validation compiler checks the retained source hashes and compiles each version independently without changing its source.
 It supports the validation keywords present in those contracts and rejects unsupported keywords.
 Discriminator dispatch follows the recorded interpretation in [the normalization ledger](src/normalization-ledger.json).
-Required fields, nullability and additional-property rules retain their recorded meaning.
+Required fields and additional-property rules retain their recorded meaning.
+Nullability follows the source schema except for the response-only rules in the normalization ledger.
 UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI formats remain annotations.
 
 [The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations, contract cases and resolution status.
 The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
-Unresolved conflicts block only the affected command families when their response validators are requested.
+Unresolved structural conflicts block operations whose response schemas reach the conflicting field, with the retained device-family exception described in [Inventory, clients, networks and references](#inventory-clients-networks-and-references).
 Application and site validation remain available.
-The normalization ledger owns the reviewed PoE resolution, its version scope and expectations, and the required fields for future resolutions.
+The normalization ledger owns the reviewed PoE resolution and response-side NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
 
 ## Development and verification
 

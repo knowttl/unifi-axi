@@ -45,7 +45,7 @@ All writes remain unavailable, including profiles with write permissions enabled
 It accepts the official `--offset`, `--limit` and `--filter` query flags.
 The default limit is 25 per request; `--limit 0` reads metadata only and reports incomplete when rows remain.
 Enumeration is bounded to 100 pages, 10,000 rows, eight MiB across responses and thirty seconds.
-Repeated records, stalled offsets, changing totals or exhausted budgets fail with `READ_INCOMPLETE`, including progress and filter guidance.
+Repeated records, stalled offsets, changing totals, counts exceeding requested or reported bounds, or exhausted budgets fail with `READ_INCOMPLETE`, including progress and filter guidance.
 Malformed JSON, missing fields and wrong types fail with `RESPONSE_INVALID`.
 An empty result at or beyond `totalCount` reports `count: 0` and `complete: true`, preserving the requested `offset` and upstream `totalCount`.
 
@@ -124,6 +124,7 @@ HTTP 401 is never retried.
 HTTP 429 retries only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
 Redirects are refused without sending credentials to the destination.
 Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
+Response byte-budget failures return `READ_INCOMPLETE`; request deadline failures return `TIMEOUT`, which site enumeration converts to `READ_INCOMPLETE` with progress guidance.
 
 The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
 WAN, VPN and RADIUS changes, UniFi OS backup/restore, firmware upgrades and administrator management are absent from those contracts.
@@ -139,18 +140,15 @@ The credential schema ships as `dist/axi-credential.schema.json` with `apiKey` m
 
 The validation compiler checks the retained source hashes and compiles each version independently without changing its source.
 It supports the validation keywords present in those contracts and rejects unsupported keywords.
-Discriminator dispatch requires the exact mapped tag and validates the selected subtype with its allOf ancestors.
-Ancestor validation suppresses recursive dispatch while nested properties dispatch normally.
+Discriminator dispatch follows the recorded interpretation in [the normalization ledger](src/normalization-ledger.json).
 Required fields, nullability and additional-property rules retain their recorded meaning.
 UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI formats remain annotations.
 
-`src/contract-conflicts.json` records all twelve structural conflicts and 180 description-versus-null conflicts with their versions, pointers, source hashes, assigned operations and contract cases.
+[The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations, contract cases and resolution status.
 The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
 Unresolved conflicts block only the affected command families when their response validators are requested.
 Application and site validation remain available.
-The reviewed PoE resolution in `src/normalization-ledger.json` accepts integer values 1 through 4 only at the recorded 10.6.109 field.
-The corresponding 11.0.97 conflict remains blocked.
-Future resolutions must record source and field hashes, interpretation, reviewer and positive and negative expectations in that ledger.
+The normalization ledger owns the reviewed PoE resolution, its version scope and expectations, and the required fields for future resolutions.
 
 ## Development and verification
 

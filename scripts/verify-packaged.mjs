@@ -65,7 +65,7 @@ try {
   assert.equal(archives.length, 1);
   const archive = join(temporary, archives[0]);
   const integrity = sha(readFileSync(archive));
-  command(process.execPath, [pnpmScript, '--dir', prefix, 'add', '--offline', '--ignore-scripts', '--save-exact', archive]);
+  command(process.execPath, [pnpmScript, '--dir', prefix, 'add', '--prefer-offline', '--ignore-scripts', '--save-exact', archive]);
   const installed = join(prefix, 'node_modules/@knowttl/unifi-axi');
   const installedPackage = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
   assert.equal(installedPackage.name, '@knowttl/unifi-axi');

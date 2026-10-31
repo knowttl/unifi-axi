@@ -11,7 +11,7 @@ import { verifyApplication } from './application.mjs';
 export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false }) {
   const home = join(temporary, 'credentials');
   mkdirSync(home, { mode: 0o700 });
-  const config = join(home, 'config.json');
+  const config = join(home, 'config with spaces.json');
   const secretFile = join(home, 'key.txt');
   const syntheticKey = 'synthetic-"key+/=%';
   const redactedForms = [syntheticKey, JSON.stringify(syntheticKey).slice(1, -1), encodeURIComponent(syntheticKey)];

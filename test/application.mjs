@@ -42,13 +42,16 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
   const selected = await cli(['--profile', 'lab', '--config', config, '--site', second.id], 0,
     { UNIFI_AXI_SITE_ID: first.id });
   assert.equal(selected.selectedSite, second.id, 'Explicit site wins over profile and environment');
-  for (const hint of selected.help) {
-    assert.ok(hint.includes(`--site ${second.id}`));
-    assert.ok(hint.includes('--profile lab'));
-    assert.ok(hint.includes(`--config ${config}`));
+  const hints = selected.help.map(hint => hint.match(/(?:[^\s'\\]|'[^']*'|\\.)+/g)
+    .map(word => word.replace(/'([^']*)'|\\(.)/g, (_, quoted, escaped) => quoted ?? escaped)));
+  for (const hint of hints) {
+    assert.deepEqual(hint.slice(3), ['--profile', 'lab', '--config', config, '--site', second.id]);
   }
-  const followup = selected.help.find(hint => hint.startsWith('unifi-axi site list')).split(' ').slice(1);
+  const followup = hints.find(hint => hint[1] === 'site' && hint[2] === 'list').slice(1);
   assert.equal((await cli(followup)).selectedSite, second.id, 'Emitted site-list hint is executable');
+  const context = followup.slice(2, -2);
+  assert.equal((await cli(['auth', 'status', ...context])).auth.profile, 'lab');
+  assert.equal((await cli(['config', 'path', ...context])).config.path, config);
   configure({ lab: { ...profile, apiContract: '10.6.109' } });
   assert.deepEqual((await cli(['info'])).api,
     { applicationVersion: '11.0.97', contract: '11.0.97', status: 'verified', writesAvailable: false },

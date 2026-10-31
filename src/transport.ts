@@ -12,9 +12,9 @@ export async function readJson(profile: Profile, apiKey: string, path: string): 
     ...(isIP(hostname) ? {} : { servername: hostname }), rejectUnauthorized: true,
     ...(profile.tls ? { ca: profile.tls.trustedCertificatePem } : {}),
   });
+  const deadline = setTimeout(() => socket.destroy(new ToolError('TIMEOUT', 'API request exceeded its 10-second deadline.')), 10_000);
   try {
     await new Promise<void>((resolve, reject) => {
-      socket.setTimeout(5000, () => socket.destroy(new Error('TLS timeout')));
       socket.once('error', reject);
       socket.once('secureConnect', () => {
         const peer = socket.getPeerCertificate();
@@ -24,8 +24,10 @@ export async function readJson(profile: Profile, apiKey: string, path: string): 
         } else resolve();
       });
     });
-  } catch {
+  } catch (error) {
+    clearTimeout(deadline);
     socket.destroy();
+    if (error instanceof ToolError) throw error;
     throw new ToolError('TLS_REJECTED', 'TLS chain, validity, hostname or peer fingerprint verification failed.');
   }
   const agent = new Agent({ maxSockets: 1 });
@@ -49,12 +51,11 @@ export async function readJson(profile: Profile, apiKey: string, path: string): 
           try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new ToolError('RESPONSE_INVALID', 'API response is not JSON.')); }
         });
       });
-      call.setTimeout(5000, () => call.destroy(new Error('HTTP timeout')));
       call.once('error', reject);
       call.end();
     });
   } catch (error) {
     if (error instanceof ToolError) throw error;
     throw new ToolError('TRANSPORT_FAILED', 'API request failed.');
-  } finally { agent.destroy(); socket.destroy(); }
+  } finally { clearTimeout(deadline); agent.destroy(); socket.destroy(); }
 }

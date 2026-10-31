@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "test": "pnpm verify:packaged -- --task B1.2a && node --test test/private-file.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm verify:packaged && node --test test/private-file.mjs",
-    "verify:packaged": "node scripts/verify-packaged.mjs"
+    "verify:packaged": "node scripts/verify-packaged.mjs",
+    "verify:artium": "node scripts/verify-artium.mjs"
   },
   "dependencies": { "@toon-format/toon": "2.3.1" },
   "devDependencies": {

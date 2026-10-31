@@ -4,6 +4,8 @@ An agent-facing CLI for the official UniFi Network Integration API.
 Package: `@knowttl/unifi-axi`.
 
 B1.2a adds application version validation, site discovery, doctor and a configured live home to the protected profiles and verified HTTPS transport from B1.2.
+B1.3 adds an opt-in first-read proof through a reviewed, temporary local Artium fixture.
+Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
 `info` and `site list` are implemented with the minimal application and site schemas shared by the two retained contracts.
 The other 71 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
@@ -109,6 +111,7 @@ Private key PEM, mismatched fingerprints and unknown TLS options are refused.
 The route changes only the TCP destination; the origin remains the TLS name and HTTP Host.
 Chain, validity, hostname and peer pin checks finish before any authenticated HTTP request.
 There is no TLS bypass flag.
+Each API request has a ten-second deadline across TLS establishment and HTTP response consumption.
 Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
 
 The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
@@ -138,6 +141,7 @@ pnpm verify:packaged -- --task B1.2a
 ```
 
 `pnpm check` runs strict types, lint and all implemented packaged obligations.
+The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
 The packaged selector builds and packs the distribution, installs it offline into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
 It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.
 Offline discovery and credential commands run with a fail-closed network attempt recorder; transport checks use a local fake HTTPS controller.
@@ -157,3 +161,21 @@ Native Windows ACL and install evidence remain PENDING on Linux/WSL; injected Wi
 TLS tests generate temporary synthetic CAs, certificates and keys with OpenSSL, exercise accepted and rejected peers, and count HTTP requests at the fake controller.
 No private keys are committed or retained.
 See [retained evidence](evidence/README.md) for original paths and manifest hashes.
+
+The B1.3 Linux proof requires a separate, built Artium fixture descended from revision `3cfc65afc2d7c1a0f50d2f6e02dc2ee13d6fd7e8`, with the reviewed B1.3 delta and current package installed.
+The installed package's runtime assets must match this checkout's current `dist` build.
+Both paths must be absolute; the output directory must already exist outside this repository and must not contain a `scratch` entry.
+It never edits the shared fixture checkout or connects to a controller.
+
+```text
+pnpm verify:artium --host /absolute/task-owned/artium --output /absolute/external/evidence
+```
+
+The real host CLI talks to the real loopback server, parser, shared v2 profile writer and runner.
+Only task-owned loopback vendor and host ports are reachable through the Node socket guard in the host, client and packaged child.
+The proof checks typed info/sites for both retained versions, competing developer profiles, admission failures before vendor access, read journal classification, cancellation, deadlines, output bounds and private input cleanup.
+The fixture-only input consumer is host evidence and adds no command to the UniFi package.
+The host's shorter deadline remains distinct from the package request deadline described in [Credentials and transport](#credentials-and-transport).
+The verifier writes provenance, package integrity, effective limits and native platform results to `artium-proof.json` outside this repository, and removes synthetic TLS keys and scratch state.
+This harness currently uses the native Linux process observer and POSIX host runner.
+Native Windows execution remains PENDING and is a blocking host compatibility gate; WSL or these Linux results cannot pass it.

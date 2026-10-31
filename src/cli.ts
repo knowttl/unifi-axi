@@ -153,7 +153,7 @@ export async function main(args: string[]): Promise<number> {
     const executable = resolve(process.argv[1]!);
     const home = homedir();
     return output({ bin: executable.startsWith(`${home}/`) || executable.startsWith(`${home}\\`) ? `~${executable.slice(home.length)}` : executable,
-      description, error: { code: 'PROFILE_REQUIRED', message: 'No usable profile. Credential configuration and live home data are not implemented in B1.1.' },
+      description, error: { code: 'PROFILE_REQUIRED', message: 'No usable profile. Credential configuration is available in B1.2; live home data is not yet implemented.' },
       help: ['unifi-axi commands', 'unifi-axi auth status', 'unifi-axi --help'] }, 1);
   }
   if (operation || extra) {

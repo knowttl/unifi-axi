@@ -6,11 +6,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decode } from '@toon-format/toon';
+import { verifyCredentials } from '../test/credentials.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && args[1] === 'B1.1'),
-  'Only implemented task B1.1 is selectable. Unknown, future, duplicate or incomplete selectors fail.');
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2'].includes(args[1])),
+  'Only implemented tasks B1.1 and B1.2 are selectable. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
 const user = join(temporary, 'user');
@@ -84,10 +85,10 @@ try {
 
   const discovery = decode(cli(['commands']));
   assert.equal(discovery.count, 73);
-  assert.deepEqual(discovery.commands, expected.map(({ id, command, effect }) => ({ id, command, effect, status: 'not-implemented' })));
+  assert.deepEqual(discovery.commands, expected.map(({ id, command, effect }) => ({ id, command, effect, status: command === 'info' ? 'transport-only' : 'not-implemented' })));
   const top = decode(cli(['--help']));
   assert.deepEqual(top.examples, ['unifi-axi commands', 'unifi-axi info --help', 'unifi-axi auth status']);
-  assert.deepEqual(top.commands.filter(entry => entry.command === 'info'), [{ command: 'info', status: 'not-implemented' }]);
+  assert.deepEqual(top.commands.filter(entry => entry.command === 'info'), [{ command: 'info', status: 'transport-only' }]);
   const rows = [];
   for (const operation of expected) {
     const words = operation.command.split(' ');
@@ -96,10 +97,10 @@ try {
     assert.equal(help.effect, operation.effect);
     assert.equal(help.method, operation.method);
     assert.equal(help.path, operation.path);
-    assert.equal(help.status, 'not-implemented');
+    assert.equal(help.status, operation.command === 'info' ? 'transport-only' : 'not-implemented');
     assert.deepEqual(help.examples[0], `unifi-axi ${operation.command} --help`);
     const unfinished = decode(cli(words, 1, { UNIFI_AXI_ORIGIN: 'https://127.0.0.1:9' }));
-    assert.equal(unfinished.error.code, 'NOT_IMPLEMENTED');
+    assert.equal(unfinished.error.code, operation.command === 'info' ? 'CONFIG_INVALID' : 'NOT_IMPLEMENTED');
     const unknown = decode(cli([...words, '--misspelled'], 2, { UNIFI_AXI_ORIGIN: 'https://127.0.0.1:9' }));
     assert.equal(unknown.error.code, 'UNKNOWN_FLAG');
     assert.equal(unknown.help[0].includes('--help'), true);
@@ -110,7 +111,7 @@ try {
     const words = entry.command.split(' ');
     const help = decode(cli([...words, '--help']));
     assert.equal(help.command, entry.command);
-    if (entry.command !== 'commands' && entry.command !== 'auth status') {
+    if (['doctor', 'setup', 'write show', 'write reconcile'].includes(entry.command)) {
       assert.equal(decode(cli(words, 1)).error.code, 'NOT_IMPLEMENTED');
     }
   }
@@ -130,8 +131,8 @@ try {
   ]) assert.equal(decode(cli(args, 2)).error.code, code);
   assert.equal(decode(cli(['site', 'list', '--limit=0', '--offset', '0'], 1)).error.code, 'NOT_IMPLEMENTED');
   assert.equal(decode(cli([], 1)).error.code, 'PROFILE_REQUIRED');
-  assert.deepEqual(decode(cli(['auth', 'status'])).auth, { status: 'unconfigured', profile: null, source: 'none supplied' });
-  assert.equal(decode(cli(['auth', 'status'], 1, { UNIFI_AXI_ORIGIN: 'https://127.0.0.1:9' })).error.code, 'NOT_IMPLEMENTED');
+  assert.equal(decode(cli(['auth', 'status'], 1)).error.code, 'PROFILE_REQUIRED');
+  assert.equal(decode(cli(['auth', 'status'], 1, { UNIFI_AXI_ORIGIN: 'https://127.0.0.1:9' })).error.code, 'CONFIG_INVALID');
 
   const metadata = JSON.parse(command(process.execPath, ['--input-type=module', '-e',
     "import {catalogue} from '@knowttl/unifi-axi/catalogue';import capabilities from '@knowttl/unifi-axi/capabilities' with {type:'json'};import {readFileSync} from 'node:fs';const skill=readFileSync(new URL(import.meta.resolve('@knowttl/unifi-axi/skill')),'utf8');console.log(JSON.stringify({catalogue,capabilities,skill}));"], { cwd: prefix, env }).stdout);
@@ -140,7 +141,7 @@ try {
   assert.deepEqual(metadata.capabilities.operations, metadata.catalogue, 'Generated metadata must match the public catalogue');
   const skillRows = metadata.skill.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('| Command'))
     .map(line => line.split('|').slice(1, -1).map(cell => cell.trim()));
-  assert.deepEqual(skillRows, expected.map(({ command, effect }) => [command, effect, 'not-implemented']),
+  assert.deepEqual(skillRows, expected.map(({ command, effect }) => [command, effect, command === 'info' ? 'transport-only' : 'not-implemented']),
     'The generated public skill must describe the agreed command surface');
   for (const version of ['10.6.109', '11.0.97']) {
     const contract = JSON.parse(readFileSync(join(installed, `evidence/sources/network-${version}-openapi.json`), 'utf8'));
@@ -174,10 +175,13 @@ try {
     assert.ok(timings[flag].ratio <= 2, `${flag} must remain within twice this host's bare Node median: ${JSON.stringify(timings[flag])}`);
   }
   assert.equal(new Set(rows.map(row => row.operation)).size, 73, 'No duplicate or missing results');
-  console.log(JSON.stringify({ task: 'B1.1', result: 'passed', platform: process.platform,
-    nativeWindows: process.platform === 'win32' ? 'passed' : 'unrun', node: process.version,
+  if (args[1] !== 'B1.1') rows.push(...await verifyCredentials({ executable, installed, temporary, env, guard }));
+  console.log(JSON.stringify({ task: args[1] ?? 'B1.2', result: 'passed-on-current-platform', platform: process.platform,
+    nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING', node: process.version,
     packageIntegritySha256: integrity, executable, sourceHashes,
-    inputHashes: { catalogue: sha(readFileSync(join(root, 'test/fixtures/catalogue.json'))) },
+    inputHashes: { catalogue: sha(readFileSync(join(root, 'test/fixtures/catalogue.json'))),
+      lockfile: sha(readFileSync(join(root, 'pnpm-lock.yaml'))),
+      credentials: sha(readFileSync(join(root, 'test/credentials.mjs'))) },
     timings, rows, futureTasks: 'unimplemented', liveMutationProbes: '32 unrun' }, null, 2));
 } finally {
   rmSync(temporary, { recursive: true, force: true });

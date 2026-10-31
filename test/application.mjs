@@ -77,6 +77,14 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
   assert.equal(page.count, 1);
   assert.equal(page.totalCount, 2);
   assert.equal(page.complete, true);
+  for (const offset of [2, 5]) {
+    const beyond = await cli(['site', 'list', '--offset', String(offset)]);
+    assert.deepEqual(beyond.sites, []);
+    assert.equal(beyond.offset, offset);
+    assert.equal(beyond.count, 0);
+    assert.equal(beyond.totalCount, 2);
+    assert.equal(beyond.complete, true);
+  }
   const metadata = await cli(['site', 'list', '--limit', '0']);
   assert.deepEqual(metadata.sites, []);
   assert.equal(metadata.totalCount, 2);
@@ -108,6 +116,7 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
     {}, { offset: 0, limit: 25, count: 1, totalCount: 1, data: [{ ...first, id: 'not-a-uuid' }] },
     { offset: 0, limit: 25, count: 1, totalCount: 1, data: [{ id: first.id, name: first.name }] },
     { offset: 0, limit: 25, count: 0, totalCount: 1, data: [] },
+    { offset: 0, limit: 25, count: 1, totalCount: 0, data: [first] },
     { offset: 0, limit: 25, count: '1', totalCount: 1, data: [first] },
   ]) {
     seed(request => request.url.endsWith('/info') ? { applicationVersion: version } : bad);

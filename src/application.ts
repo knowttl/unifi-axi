@@ -51,7 +51,7 @@ export async function sites(profile: Profile, secret: string, values: Record<str
     if (values.filter !== undefined) query.set('filter', values.filter);
     const page = sitePage(await readJson(profile, secret, `/v1/sites?${query}`));
     if (page.offset !== next || (totalCount !== undefined && page.totalCount !== totalCount) ||
-      page.count > limit || page.offset + page.count > page.totalCount) invalid();
+      page.count > limit || (page.count > 0 && page.offset + page.count > page.totalCount)) invalid();
     totalCount = page.totalCount;
     for (const site of page.data) {
       if (ids.has(site.id)) invalid();

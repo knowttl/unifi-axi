@@ -40,11 +40,11 @@ All writes remain unavailable, including profiles with write permissions enabled
 `site list` enumerates pages and reports exact site UUIDs, internal references, names, returned `count`, `totalCount`, starting `offset` and `complete`.
 It accepts the official `--offset`, `--limit` and `--filter` query flags.
 The default limit is 25 per request; `--limit 0` reads metadata only and reports incomplete when rows remain.
-Enumeration stops after 100 pages with `READ_INCOMPLETE`; malformed or inconsistent pages fail with `RESPONSE_INVALID`.
-Successful empty lists report zero counts and `complete: true`.
+Enumeration still unfinished after 100 pages fails with `READ_INCOMPLETE`; malformed or inconsistent pages fail with `RESPONSE_INVALID`.
+An empty result at or beyond `totalCount` reports `count: 0` and `complete: true`, preserving the requested `offset` and upstream `totalCount`.
 
 Select a site with `--site <site-id>`, then the profile's `siteId`, then the sole discovered site.
-Site discovery works without selection; home reports `SITE_AMBIGUOUS` for multiple sites without a selection and `SITE_REQUIRED` when no sites exist.
+Site discovery works without selection; without an explicit or profile selection, home reports `SITE_AMBIGUOUS` for multiple sites and `SITE_REQUIRED` when no sites exist.
 An explicit selection survives contextual hints along with the selected file profile and explicit configuration path.
 This stage sends no site-specific request.
 
@@ -109,7 +109,7 @@ Private key PEM, mismatched fingerprints and unknown TLS options are refused.
 The route changes only the TCP destination; the origin remains the TLS name and HTTP Host.
 Chain, validity, hostname and peer pin checks finish before any authenticated HTTP request.
 There is no TLS bypass flag.
-Information responses are bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
+Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
 
 The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
 WAN, VPN and RADIUS changes, UniFi OS backup/restore, firmware upgrades and administrator management are absent from those contracts.

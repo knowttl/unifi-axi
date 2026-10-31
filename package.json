@@ -26,7 +26,7 @@
     "verify:contracts": "pnpm build && node scripts/verify-contracts.mjs",
     "verify:artium": "node scripts/verify-artium.mjs"
   },
-  "dependencies": { "@toon-format/toon": "2.3.1" },
+  "dependencies": { "@decimalturn/toml-patch": "3.3.2", "@toon-format/toon": "2.3.1" },
   "devDependencies": {
     "@types/node": "24.10.0",
     "eslint": "9.39.1",

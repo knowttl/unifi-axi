@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@decimalturn/toml-patch':
+        specifier: 3.3.2
+        version: 3.3.2
       '@toon-format/toon':
         specifier: 2.3.1
         version: 2.3.1
@@ -26,6 +29,10 @@ importers:
         version: 8.46.3(eslint@9.39.1)(typescript@5.9.3)
 
 packages:
+
+  '@decimalturn/toml-patch@3.3.2':
+    resolution: {integrity: sha512-UUsjKkIJWC4JwhAK7IUMZeN4TjjtCWapAkdIuvllT3/fYcNooDQ0HtwgGDV77ew+arh/15hazN9M9/oSNV+PDg==}
+    engines: {node: '>=16'}
 
   '@eslint-community/eslint-utils@4.10.1':
     resolution: {integrity: sha512-cuadcxVFE8sDK6iWJbs8Sn0av2Nrh2QSGQhVlBW9AaAHqHwjWsZHT8LJ4hFGPh7ASBV2deFdM7H/DPjulmh8rg==}
@@ -532,6 +539,8 @@ packages:
     engines: {node: '>=10'}
 
 snapshots:
+
+  '@decimalturn/toml-patch@3.3.2': {}
 
   '@eslint-community/eslint-utils@4.10.1(eslint@9.39.1)':
     dependencies:

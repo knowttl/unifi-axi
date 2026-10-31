@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'no
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { decode } from '@toon-format/toon';
+import { parse } from '@decimalturn/toml-patch';
 
 interface SetupResult { setup: { status: string; digest: string; changed: boolean; targets: string[] } }
 interface ErrorResult { error: { code: string } }
@@ -53,6 +54,35 @@ export function verifyIntegrations({ cli, temporary, user, guard }: Context): vo
       if (app === 'codex') assert.match(readFileSync(installed.setup.targets[1]!, 'utf8'), /\[features\]\nhooks = true/);
     } else assert.match(readFileSync(installed.setup.targets[0]!, 'utf8'), /experimental.chat.system.transform/);
     assert.equal((decode(cli(args, 1, { UNIFI_AXI_HOSTED: '1' })) as unknown as ErrorResult).error.code, 'HOSTED_DENIED');
+  }
+  for (const [name, definition] of Object.entries({
+    bare: '[features]\nhooks = false\nother = false',
+    quotedKey: '[features]\n"hooks" = false\nother = false',
+    literalKeys: "['features']\n'hooks' = false\nother = false",
+    quotedTable: '[ "features" ] # retained table\n"hooks" = false\nother = false',
+    escapedKeys: '["fea\\u0074ures"]\n"hoo\\u006bs" = false\nother = false',
+    dotted: 'features.hooks = false\nfeatures.other = false',
+    inline: 'features = { hooks = false, other = false }',
+    missingKey: '[features]\nother = false',
+    missingTable: '',
+  })) {
+    const directory = join(temporary, `codex-toml-${name}`);
+    mkdirSync(join(directory, '.codex'), { recursive: true });
+    const target = join(directory, '.codex/config.toml');
+    const before = `# retained configuration\nmodel = "retained"\nquota = 9223372036854775807\n${definition}\n[unrelated]\nvalue = "retained"\n`;
+    writeFileSync(target, before);
+    const expected = parse(before) as { features?: Record<string, unknown> };
+    const args = ['setup', '--app', 'codex', '--directory', directory, '--profile', 'lab', '--config', config];
+    const preview = decode(cli(args)) as unknown as SetupResult;
+    assert.equal(readFileSync(target, 'utf8'), before, `${name}: preview preserves configuration`);
+    cli([...args, '--execute', '--confirm', preview.setup.digest]);
+    const actual = parse(readFileSync(target, 'utf8')) as { features: Record<string, unknown> };
+    assert.deepEqual({ ...actual, features: { ...actual.features } }, { ...expected, features: { ...expected.features, hooks: true } },
+      `${name}: R1 enables the semantic hooks key and preserves other definitions`);
+    const installed = readFileSync(target, 'utf8');
+    const again = decode(cli([...args, '--execute'])) as unknown as SetupResult;
+    assert.equal(again.setup.status, 'no-op', name);
+    assert.equal(readFileSync(target, 'utf8'), installed, name);
   }
   for (const folder of ['.claude', '.codex', '.opencode']) assert.equal(existsSync(join(user, folder)), false, 'Normal commands install no integrations');
 }

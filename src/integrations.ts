@@ -1,6 +1,7 @@
 import { access, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
+import { parse, patch } from '@decimalturn/toml-patch';
 import { effectPolicy } from './effects.js';
 import { ToolError } from './security.js';
 
@@ -66,12 +67,12 @@ export async function setup(values: Record<string, string>, execute: boolean) {
       if ((await lstat(target)).isSymbolicLink()) throw new ToolError('SETUP_UNSAFE', 'Integration paths must not be symbolic links.');
       before = await readFile(target, 'utf8');
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    const text = before ? `${before.trimEnd()}\n` : '';
-    const features = /(^[ \t]*\[features\][ \t]*(?:#[^\n]*)?\r?\n)([\s\S]*?)(?=^[ \t]*\[|$(?![\s\S]))/m;
-    const match = features.exec(text);
-    const body = match?.[2] ?? '';
-    const updated = /^[ \t]*hooks\s*=/m.test(body) ? body.replace(/^[ \t]*hooks\s*=.*$/m, 'hooks = true') : `hooks = true\n${body}`;
-    const content = match ? text.replace(features, () => `${match[1]}${updated}`) : `${text}${text.endsWith('\n') || !text ? '' : '\n'}[features]\nhooks = true\n`;
+    const document = parse(before ?? '') as Record<string, unknown>;
+    const features = document.features ?? {};
+    if (typeof features !== 'object' || Array.isArray(features) || features instanceof Date) {
+      throw new ToolError('SETUP_CONFLICT', 'The Codex features setting must be a TOML table.');
+    }
+    const content = patch(before ?? '', { ...document, features: { ...features, hooks: true } });
     files.push({ target, before, content });
   }
   const binding = { operation: 'setup', app, directory: scope, profile, config: config ?? null, executable, files };

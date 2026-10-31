@@ -90,6 +90,27 @@ Validation failures include the offending field path without echoing its value.
 The approved 10.6.109 PoE resolution preserves integer values without coercion and rejects strings.
 All 11.0.97 device reads remain blocked with `CONTRACT_CONFLICT` for unresolved CF-007; its integer type and string enum disagree, and no 11.0.97 override is approved.
 
+## Policies, vouchers, Wi-Fi and switching
+
+`acl-rule`, `dns policy`, `traffic-list`, `firewall zone`, `hotspot voucher`, `wifi broadcast`, `switching lag`, `switching mc-lag-domain` and `switching switch-stack` provide `list` and `show` reads.
+Use each command's `--help` for its required resource ID flag.
+Lists preserve the vendor order, filters and bounded paging metadata.
+Details preserve nested subtype fields and verify the returned ID against the requested resource.
+Empty switching lists remain empty; missing details return an explicit upstream error.
+
+`acl-rule order show` returns the ordered rule IDs.
+`firewall policy order show` requires both `--source-firewall-zone-id` and `--destination-firewall-zone-id` and returns ordering for that zone pair.
+Zone details include their network IDs.
+Firewall policy `list` and `show` remain gated by unresolved named-protocol conflicts CF-002 through CF-004 on 10.6.109 and CF-008 through CF-010 on 11.0.97.
+Wi-Fi broadcast `show` remains gated by rate enum conflicts CF-005/CF-006 and CF-011/CF-012 respectively.
+These structural conflicts block the reachable response schema even when the affected optional field is absent or a list is empty.
+Wi-Fi broadcast overview lists, policy ordering and zone reads remain available.
+No source conflict is silently normalized.
+
+Voucher `code` fields and Wi-Fi `passphrase` fields are replaced with `[REDACTED]` in default output.
+Diagnostic `error.code` fields remain visible.
+Voucher lists use the documented default limit of 100; other lists use their documented defaults.
+
 ## Credentials and transport
 
 Use `config path` to find configuration and `profile list` to list its profiles.
@@ -201,6 +222,7 @@ pnpm verify:contracts -- --task B2.1
 
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
 The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
+The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
 The packaged selector builds and packs the distribution, installs it offline into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
 It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.
 Offline discovery and credential commands run with a fail-closed network attempt recorder; transport checks use a local fake HTTPS controller.

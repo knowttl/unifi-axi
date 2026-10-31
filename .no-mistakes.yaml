@@ -8,7 +8,11 @@ agent_args_override:
 no_ci: true
 commands:
   prepare: pnpm install --offline --frozen-lockfile
-  test: pnpm check
+  test: >-
+    pnpm check &&
+    if [ -n "$UNIFI_AXI_ARTIUM_HOST" ]; then
+      pnpm verify:artium --host "$UNIFI_AXI_ARTIUM_HOST" --output "$UNIFI_AXI_ARTIUM_OUTPUT";
+    fi
   lint: pnpm lint
 review:
   path_instructions:

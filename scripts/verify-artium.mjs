@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decode } from '@toon-format/toon';
 import { guardEgress } from '../test/fixtures/fake-egress.mjs';
 import { verifyInventory } from '../test/inventory.mjs';
+import { verifyPolicies } from '../test/policies.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
@@ -265,6 +266,14 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
     },
     seed: handler => { inventoryHandler = handler; },
   });
+  report.rows.push(...await verifyPolicies({
+    cli: async (words, status = 0) => {
+      const result = decode((await cli(['unifi-axi', ...words], status)).stdout);
+      cleanupObserved();
+      return result;
+    },
+    seed: handler => { inventoryHandler = handler; },
+  }));
   inventoryHandler = undefined;
   record('STEP-B2.2/STEP-B2.3/STEP-B2.4/STEP-B2.5', { versions: ['10.6.109', '11.0.97'],
     knownLimitation: '11.0.97 device reads remain blocked by CF-007' });

@@ -35,18 +35,21 @@ function sitePage(page: SitePage): SitePage {
   return page;
 }
 
-export async function sites(profile: Profile, secret: string, values: Record<string, string>, version: string) {
+export async function sites(profile: Profile, secret: string, values: Record<string, string>, version: string, bounded = false) {
   const offset = Number(values.offset ?? 0);
   const limit = Number(values.limit ?? 25);
-  const result = await enumerate(async (next, budget) => {
-    const query = new URLSearchParams({ offset: String(next), limit: String(limit) });
+  const read = async (next: number, budget?: Parameters<typeof readJson>[3]) => {
+    const query = new URLSearchParams({ offset: String(next), limit: String(bounded ? Math.min(limit, 25 - next) : limit) });
     if (values.filter !== undefined) query.set('filter', values.filter);
     const value = await readJson(profile, secret, `/v1/sites?${query}`, budget);
     validateResponse(version, 'OP-002', value);
     return sitePage(value as SitePage);
-  }, site => site.id, offset, limit);
+  };
+  const result = await enumerate(read, site => site.id, offset, limit, undefined, bounded ? 25 : undefined);
   const { data, ...metadata } = result;
-  return { sites: data, ...metadata };
+  return { sites: data, ...metadata,
+    ...(bounded ? { truncation: { truncated: !metadata.complete, originalCount: metadata.totalCount,
+      fullCommand: 'unifi-axi site list' } } : {}) };
 }
 
 export function selectSite(data: Site[], explicit?: string): string {

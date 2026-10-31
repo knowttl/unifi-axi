@@ -1,19 +1,20 @@
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { encode } from '@toon-format/toon';
-import { catalogue, readOperations, parameterFlag, type Operation, type Parameter } from './catalogue.js';
+import { catalogue, readOperations, parameterFlag, description, guidance, examplesFor, type Operation, type Parameter } from './catalogue.js';
 import { Profiles, configPath } from './profiles.js';
 import { Redactor, ToolError } from './security.js';
 import { application, sites, selectSite } from './application.js';
 import { readOperation } from './reads.js';
+import { setup } from './integrations.js';
 
-const description = 'Read UniFi Network application, inventory, policies and switching information.';
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
   { command: 'doctor', summary: 'Check protected credentials, TLS and the Network application version', status: 'implemented' },
   ...['auth status', 'profile list', 'profile configure', 'config path']
     .map(command => ({ command, summary: 'Manage protected credential references offline', status: 'implemented' })),
-  ...['setup', 'write show', 'write reconcile']
+  { command: 'setup', summary: 'Preview or install directory-scoped session context', status: 'implemented' },
+  ...['write show', 'write reconcile']
     .map(command => ({ command, summary: 'Planned capability', status: 'not-implemented' })),
 ];
 
@@ -64,7 +65,11 @@ export async function main(args: string[]): Promise<number> {
     flags.push({ name: 'config', type: 'string', required: false }, { name: 'profile', type: 'string', required: false });
   }
   if (['', 'site list'].includes(command)) flags.push({ name: 'site', type: 'string', required: false });
+  if (['', 'doctor'].includes(command) || operation?.effect === 'read') flags.push({ name: 'full', type: 'switch', required: false });
   if (command === 'profile configure') flags.push({ name: 'file', type: 'string', required: true });
+  if (command === 'setup') flags.push(...['app', 'directory', 'profile', 'config', 'confirm']
+    .map(name => ({ name, type: 'string', required: ['app', 'directory', 'profile'].includes(name) })),
+  { name: 'execute', type: 'switch', required: false });
   const seen = new Set<string>();
   const values: Record<string, string> = {};
   const tokens = firstFlag < 0 ? [] : args.slice(firstFlag);
@@ -102,27 +107,40 @@ export async function main(args: string[]): Promise<number> {
   }
   if (seen.has('help')) {
     if (operation) {
-      const required = flags.filter(flag => flag.required).map(flag => ` --${flag.name} <${flag.name}>`).join('');
-      const example = `unifi-axi ${command}${required}`;
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
         output: operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract; writes unavailable.' : 'No vendor output until implemented. This operation fails before network access.',
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
-        })), examples: [`unifi-axi ${command} --help`, example] });
+        })), examples: examplesFor(operation) });
     }
-    return output({ command: command || 'unifi-axi', description,
+    return output({ command: command || 'unifi-axi', description, ...(command === '' ? { guidance } : {}),
       ...(extra ? { summary: extra.summary, status: extra.status } : {}),
       flags: flags.map(flag => `--${flag.name}${flag.type === 'switch' ? '' : ' <value>'}`),
       commands: command ? children.map(({ command, status }) => ({ command, status })) :
         [...auxiliary, ...catalogue].map(({ command, status }) => ({ command, status })),
-      examples: command === 'doctor' ? ['unifi-axi doctor', 'unifi-axi doctor --profile <name>', 'unifi-axi doctor --config <absolute-path>'] :
+      examples: command === 'setup' ? ['unifi-axi setup --app claude --directory <absolute-path> --profile <name>',
+        'unifi-axi setup --app claude --directory <absolute-path> --profile <name> --execute --confirm <digest>'] : command === 'doctor' ? ['unifi-axi doctor', 'unifi-axi doctor --profile <name>', 'unifi-axi doctor --config <absolute-path>'] :
         ['unifi-axi commands', 'unifi-axi info --help', 'unifi-axi auth status'] });
   }
   if (command === 'commands') {
     return output({ count: catalogue.length, commands: catalogue.map(({ id, command, effect, status }) => ({ id, command, effect, status })),
       help: ['unifi-axi info --help', 'unifi-axi site list --help'] });
+  }
+  if (command === 'setup') {
+    try {
+      if (process.env.UNIFI_AXI_HOSTED === '1') throw new ToolError('HOSTED_DENIED', 'Session integration setup is unavailable in hosted execution.');
+      values.config = configPath(values.config);
+      if (!values.profile) return usage('INVALID_ARGUMENT', 'setup requires an explicit --profile.', flags);
+      const selected = await new Profiles(configPath(values.config)).select(values.profile);
+      if (selected.source !== 'file') throw new ToolError('PROFILE_REQUIRED', 'Setup requires a named file-backed profile.');
+      return output(await setup(values, seen.has('execute')));
+    } catch (error) {
+      return output({ error: { code: error instanceof ToolError ? error.code : 'SETUP_INVALID',
+        message: error instanceof ToolError ? error.message : 'Unable to read or update the selected integration configuration.' },
+      help: ['unifi-axi setup --help'] }, 1);
+    }
   }
   if (operation && readOperations.has(operation.id)) {
     const missing = flags.find(flag => flag.required && flag.name !== 'site' && !values[flag.name]);
@@ -160,9 +178,24 @@ export async function main(args: string[]): Promise<number> {
         return 0;
       }
       const result = await application(selected.profile, secret);
+      if (command === '') result.information = Object.fromEntries(Object.entries(result.information)
+        .filter(([key]) => ['applicationVersion', 'siteManagerVersion'].includes(key)));
       api = result.api;
       const emit = (value: Record<string, unknown>, code = 0) => {
-        console.log(redactor.text(encode(redactor.payload({ ...identity, ...value }) as Parameters<typeof encode>[0])));
+        const truncated: { path: string; originalSize: number }[] = [];
+        const bound = (item: unknown, path: string): unknown => {
+          if (typeof item === 'string' && item.length > 1000 && !seen.has('full')) {
+            truncated.push({ path, originalSize: item.length });
+            return `${item.slice(0, 1000)}...`;
+          }
+          if (Array.isArray(item)) return item.map((entry, index) => bound(entry, `${path}/${index}`));
+          if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, bound(entry, `${path}/${key}`)]));
+          return item;
+        };
+        const payload = bound(redactor.payload({ ...identity, ...value }), '') as Record<string, unknown>;
+        if (truncated.length) payload.textTruncation = { fields: truncated,
+          fullCommand: `unifi-axi ${args.map(quote).join(' ')} --full`.replace('  ', ' ') };
+        console.log(redactor.text(encode(payload as Parameters<typeof encode>[0])));
         return code;
       };
       if (!result.api.contract) return emit({ ...result,
@@ -177,11 +210,14 @@ export async function main(args: string[]): Promise<number> {
         return emit({ api, ...(inputs.site ? { selectedSite: inputs.site } : {}),
           ...await readOperation(selected.profile, secret, operation, inputs, result.api.contract) });
       }
-      const listing = await sites(selected.profile, secret, values, result.api.contract);
+      const listing = await sites(selected.profile, secret, values, result.api.contract, command === '');
+      if (command === '') listing.sites = listing.sites.map(({ id, internalReference, name }) => ({ id, internalReference, name }));
       const requested = values.site ?? selected.profile.siteId;
       const context = `${profileContext}${configContext}`;
+      if (listing.truncation) listing.truncation.fullCommand = `unifi-axi site list${context}`;
       let siteId: string | undefined;
       try {
+        if (command === '' && !listing.complete && requested === undefined) throw new ToolError('SITE_AMBIGUOUS', 'Select a site with --site <site-id>; the home view is bounded.');
         if (command === '' || requested !== undefined || listing.sites.length === 1) siteId = selectSite(listing.sites, requested);
       } catch (error) {
         if (!(error instanceof ToolError)) throw error;

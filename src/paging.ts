@@ -5,7 +5,7 @@ export interface Page<T> { offset: number; limit: number; count: number; totalCo
 
 export async function enumerate<T>(read: (offset: number, budget: ReadBudget) => Promise<Page<T>>,
   identify: (row: T) => string, offset: number, limit: number,
-  bounds = { pages: 100, rows: 10_000, budget: readBudget() }) {
+  bounds = { pages: 100, rows: 10_000, budget: readBudget() }, stopAfterRows?: number) {
   const data: T[] = [];
   const ids = new Set<string>();
   let next = offset;
@@ -34,6 +34,7 @@ export async function enumerate<T>(read: (offset: number, budget: ReadBudget) =>
     }
     next += page.count;
     if (next >= totalCount || limit === 0) return { data, offset, count: data.length, totalCount, complete: next >= totalCount };
+    if (stopAfterRows !== undefined && data.length >= stopAfterRows) return { data, offset, count: data.length, totalCount, complete: false };
     if (page.count === 0) incomplete('offset stalled');
   }
   return incomplete('page budget exceeded');

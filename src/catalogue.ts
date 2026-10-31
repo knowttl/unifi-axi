@@ -70,3 +70,19 @@ export type Operation = typeof catalogue[number];
 export function parameterFlag(name: string): string {
   return name === 'siteId' ? 'site' : name.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
 }
+
+export const description = 'Read UniFi Network application, inventory, policies and switching information.';
+
+export function examplesFor(operation: Operation): string[] {
+  const required = operation.contracts[0]!.parameters.filter(parameter => parameter.required)
+    .map(parameter => ` --${parameterFlag(parameter.name)} <${parameterFlag(parameter.name)}>`).join('');
+  return [`unifi-axi ${operation.command} --help`, `unifi-axi ${operation.command}${required}`];
+}
+
+export const guidance = [
+  'Use unifi-axi with no arguments for bounded live application and site context.',
+  'Use unifi-axi commands for offline discovery and unifi-axi <command> --help for inputs, defaults and effects.',
+  'Select context with --profile <name>, --config <absolute-path> and --site <site-id>.',
+  'Install directory-scoped ambient context with setup --app <claude|codex|opencode> --directory <absolute-path> --profile <name>. Preview first, then repeat with --execute --confirm <digest>.',
+  'Secrets must be env/file references. TLS verification cannot be disabled. Writes remain unavailable.',
+];

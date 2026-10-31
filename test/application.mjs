@@ -90,6 +90,21 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
 
   records = [first, second];
   seed(serve);
+  records = Array.from({ length: 30 }, (_, index) => ({ ...first, id: `9361553d-e20d-45b8-a516-${String(index).padStart(12, '0')}` }));
+  const bounded = await cli(['--profile', 'lab', '--config', config, '--site', first.id]);
+  assert.equal(bounded.sites.length, 25);
+  assert.deepEqual(bounded.truncation, { truncated: true, originalCount: 30,
+    fullCommand: `unifi-axi site list --profile lab --config '${config}'` });
+  assert.equal((await cli(['site', 'list'])).sites.length, 30);
+  seed(request => request.url.endsWith('/info') ? { applicationVersion: '11.0.97', description: 'a'.repeat(1500),
+    passphrase: 'synthetic-secret' } : serve(request));
+  const short = await cli(['info']);
+  assert.deepEqual(short.textTruncation.fields, [{ path: '/information/description', originalSize: 1500 }]);
+  const full = await cli(['info', '--full']);
+  assert.equal(full.information.description, 'a'.repeat(1500));
+  assert.equal(full.information.passphrase, '[REDACTED]');
+  records = [first, second];
+  seed(serve);
   const page = await cli(['site', 'list', '--offset', '1', '--limit', '1']);
   assert.deepEqual(page.sites, [second]);
   assert.equal(page.count, 1);

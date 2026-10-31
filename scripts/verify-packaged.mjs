@@ -7,10 +7,11 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decode } from '@toon-format/toon';
 import { verifyCredentials } from '../test/credentials.mjs';
+import { verifyIntegrations } from '../test/integrations.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9'].includes(args[1])),
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9', 'B2.10'].includes(args[1])),
   'Select an implemented task. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
@@ -64,7 +65,7 @@ try {
   assert.equal(archives.length, 1);
   const archive = join(temporary, archives[0]);
   const integrity = sha(readFileSync(archive));
-  command(process.execPath, [pnpmScript, '--dir', prefix, 'add', '--ignore-scripts', '--save-exact', archive]);
+  command(process.execPath, [pnpmScript, '--dir', prefix, 'add', '--offline', '--ignore-scripts', '--save-exact', archive]);
   const installed = join(prefix, 'node_modules/@knowttl/unifi-axi');
   const installedPackage = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
   assert.equal(installedPackage.name, '@knowttl/unifi-axi');
@@ -124,7 +125,7 @@ try {
     const words = entry.command.split(' ');
     const help = decode(cli([...words, '--help']));
     assert.equal(help.command, entry.command);
-    if (['setup', 'write show', 'write reconcile'].includes(entry.command)) {
+    if (['write show', 'write reconcile'].includes(entry.command)) {
       assert.equal(decode(cli(words, 1)).error.code, 'NOT_IMPLEMENTED');
     }
   }
@@ -149,6 +150,7 @@ try {
 
   const metadata = JSON.parse(command(process.execPath, ['--input-type=module', '-e',
     "import {catalogue} from '@knowttl/unifi-axi/catalogue';import capabilities from '@knowttl/unifi-axi/capabilities' with {type:'json'};import {readFileSync} from 'node:fs';const skill=readFileSync(new URL(import.meta.resolve('@knowttl/unifi-axi/skill')),'utf8');console.log(JSON.stringify({catalogue,capabilities,skill}));"], { cwd: prefix, env }).stdout);
+  verifyIntegrations({ cli, temporary, user, guard });
   assert.deepEqual(metadata.catalogue.map(({ id, command, vendorOperationId, method, path, effect }) =>
     ({ id, command, vendorOperationId, method, path, effect })), expected);
   assert.deepEqual(metadata.capabilities.operations, metadata.catalogue, 'Generated metadata must match the public catalogue');
@@ -190,6 +192,9 @@ try {
   assert.equal(new Set(rows.map(row => row.operation)).size, 73, 'No duplicate or missing results');
   if (args[1] !== 'B1.1') rows.push(...await verifyCredentials({ executable, installed, temporary, env, guard,
     journey: args[1] !== 'B1.2' }));
+  if (args[1] === undefined || args[1] === 'B2.10') rows.push({ task: 'B2.10', acceptance: 'STEP-B2.10',
+    operation: ['OP-001', 'OP-002'], direction: 'standalone-synthetic', status: 'passed-on-current-platform',
+    integrations: ['claude', 'codex', 'opencode'], nativeWindows: 'PENDING', liveCommissioning: 'PENDING' });
   if (args[1] === undefined || ['B1.2a', 'B2.0'].includes(args[1])) rows.push({ task: 'B2.0', acceptance: 'STEP-B2.0',
     operation: ['OP-001', 'OP-002'], version: ['10.6.109', '11.0.97'], direction: 'standalone-synthetic', status: 'passed-on-current-platform' });
   console.log(JSON.stringify({ task: args[1] ?? 'B2.0', result: 'passed-on-current-platform', platform: process.platform,

@@ -236,6 +236,28 @@ pnpm verify:contracts -- --task B2.1
 
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
 The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
+The default validation prints an explicit skip reason when no frozen Artium fixture is selected.
+
+Running `unifi-axi` with a configured profile returns application context and at most 25 sites.
+The result includes the vendor total, truncation metadata and commands that retain profile and site context.
+Use `site list` for the full site listing.
+Long text is bounded to 1,000 characters with original sizes and a `--full` command; full text still redacts secrets.
+
+For optional ambient session context, preview an explicit directory-scoped integration:
+
+```sh
+unifi-axi setup --app claude --directory /absolute/project --profile lab
+unifi-axi setup --app claude --directory /absolute/project --profile lab --execute --confirm <digest>
+```
+
+Choose `claude`, `codex` or `opencode`.
+Setup binds the named file-backed profile and configuration path to that directory, preserves unrelated settings and repairs its managed integration.
+Repeat setup for a successful no-op.
+Codex setup also enables project hooks in `.codex/config.toml`.
+Hosted execution denies setup before any filesystem changes.
+Normal read commands install no integrations.
+Alternatively, install the generated static skill exported at `@knowttl/unifi-axi/skill` for on-demand discovery without session hooks.
+The hook and skill are two optional discovery paths; either one is sufficient.
 The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
 The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
 Dependency installation may use the npm registry and does not require a pre-seeded pnpm store.

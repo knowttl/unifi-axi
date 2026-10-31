@@ -122,7 +122,8 @@ try {
       return;
     }
     if (url.pathname.endsWith('/info')) {
-      const body = mode === 'bad-info' ? { applicationVersion: 11 } : { applicationVersion: version, siteManagerVersion: '5.2.23' };
+      const body = mode === 'bad-info' ? { applicationVersion: 11 } : { applicationVersion: version, siteManagerVersion: '5.2.23',
+        ...(mode === 'long-info' ? { description: 'a'.repeat(1500), passphrase: 'CANARY-wifi-secret' } : {}) };
       response.end(JSON.stringify(body));
     } else {
       assert.equal(url.pathname, '/proxy/network/integration/v1/sites');
@@ -282,6 +283,14 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
     assert.equal(decode((await cli(['unifi-axi', ...words], 1)).stdout).error.code, 'RESPONSE_INVALID');
   }
   mode = 'normal'; sites = [first, second];
+  mode = 'long-info';
+  const shortText = decode((await cli(['unifi-axi', 'info'])).stdout);
+  assert.deepEqual(shortText.textTruncation.fields, [{ path: '/information/description', originalSize: 1500 }]);
+  const fullText = decode((await cli(['unifi-axi', 'info', '--full'])).stdout);
+  assert.equal(fullText.information.description, 'a'.repeat(1500));
+  assert.equal(fullText.information.passphrase, '[REDACTED]');
+  record('AXI-003/STEP-B2.10', { fullText: 'redacted', originalSize: 1500 });
+  mode = 'normal';
   for (const [words, code] of [
     [['info', '--config', '/other'], 'FLAG_BLOCKED'], [['info', '--profile', 'developer'], 'FLAG_BLOCKED'],
     [['info', '--origin', 'https://other.invalid'], 'FLAG_BLOCKED'], [['info', '--api-key', 'CANARY-other'], 'FLAG_BLOCKED'],

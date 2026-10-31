@@ -12,6 +12,8 @@ commands:
     pnpm check &&
     if [ -n "$UNIFI_AXI_ARTIUM_HOST" ]; then
       pnpm verify:artium --host "$UNIFI_AXI_ARTIUM_HOST" --output "$UNIFI_AXI_ARTIUM_OUTPUT";
+    else
+      printf '%s\n' 'SKIP Artium journeys: opt in with UNIFI_AXI_ARTIUM_HOST and UNIFI_AXI_ARTIUM_OUTPUT (frozen fixture required).';
     fi
   lint: pnpm lint
 review:

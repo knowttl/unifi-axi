@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { writeFileSync, readFileSync, chmodSync, mkdirSync, statSync, symlinkSync, existsSync, readdirSync } from 'node:fs';
+import { appendFileSync, writeFileSync, readFileSync, chmodSync, mkdirSync, statSync, symlinkSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { X509Certificate } from 'node:crypto';
 import { createServer } from 'node:https';
@@ -10,6 +10,7 @@ import { verifyApplication } from './application.mjs';
 import { verifyReads } from './reads.mjs';
 import { verifyInventory } from './inventory.mjs';
 import { verifyPolicies } from './policies.mjs';
+import { guardEgress } from './fixtures/fake-egress.mjs';
 
 export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false }) {
   const inventoryRows = [];
@@ -20,6 +21,7 @@ export async function verifyCredentials({ executable, installed, temporary, env,
   const syntheticKey = 'synthetic-"key+/=%';
   const redactedForms = [syntheticKey, JSON.stringify(syntheticKey).slice(1, -1), encodeURIComponent(syntheticKey)];
   const source = { origin: 'https://localhost:9', apiKey: { env: 'SYNTHETIC_KEY' } };
+  const fakeGuard = join(home, 'fake-guard.ts');
   function protectWindows(path) {
     if (process.platform !== 'win32') return;
     const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
@@ -54,7 +56,7 @@ Set-Acl -LiteralPath $p -AclObject $acl
   configure();
 
   async function cli(args, code = 0, overrides = {}, guarded = true) {
-    const child = spawn(process.execPath, [...(guarded ? ['--import', guard] : []), executable, ...args], {
+    const child = spawn(process.execPath, ['--import', guarded ? guard : fakeGuard, executable, ...args], {
       cwd: home, env: { ...env, UNIFI_AXI_CONFIG: config, ...overrides }, stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 15000,
     });
@@ -182,6 +184,10 @@ Set-Acl -LiteralPath $p -AclObject $acl
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const port = server.address().port;
+  const guardSource = new URL('./fixtures/fake-egress.mjs', import.meta.url).href;
+  write(fakeGuard, `import { guardEgress } from ${JSON.stringify(guardSource)};\nimport { appendFileSync } from 'node:fs';\nguardEgress([${port}], () => appendFileSync(${JSON.stringify(env.UNIFI_AXI_TEST_NETWORK_LOG)}, 'network-attempt\\n'));\n`);
+  const denied = () => appendFileSync(env.UNIFI_AXI_TEST_NETWORK_LOG, 'network-attempt\n');
+  guardEgress([port], denied);
   const origin = `https://localhost:${port}`;
   const tls = name => ({ trustedCertificatePem: cert(name), peerFingerprintSha256: fingerprint(name), connectAddress: '127.0.0.1' });
   try {

@@ -4,14 +4,15 @@ import { encode } from '@toon-format/toon';
 import { catalogue, parameterFlag, type Operation, type Parameter } from './catalogue.js';
 import { Profiles, configPath } from './profiles.js';
 import { Redactor, ToolError } from './security.js';
-import { readInformation } from './transport.js';
+import { application, sites, selectSite } from './application.js';
 
-const description = 'Discover UniFi Network Integration API commands.';
+const description = 'Read UniFi Network application and site information.';
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
+  { command: 'doctor', summary: 'Check protected credentials, TLS and the Network application version', status: 'implemented' },
   ...['auth status', 'profile list', 'profile configure', 'config path']
     .map(command => ({ command, summary: 'Manage protected credential references offline', status: 'implemented' })),
-  ...['doctor', 'setup', 'write show', 'write reconcile']
+  ...['setup', 'write show', 'write reconcile']
     .map(command => ({ command, summary: 'Planned capability', status: 'not-implemented' })),
 ];
 
@@ -58,9 +59,10 @@ export async function main(args: string[]): Promise<number> {
   const extra = auxiliary.find(entry => entry.command === command);
   const children = [...catalogue, ...auxiliary].filter(entry => entry.command.startsWith(`${command} `));
   const flags = flagsFor(operation);
-  if (['auth status', 'profile list', 'profile configure', 'config path'].includes(command)) {
+  if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path'].includes(command)) {
     flags.push({ name: 'config', type: 'string', required: false }, { name: 'profile', type: 'string', required: false });
   }
+  if (['', 'site list'].includes(command)) flags.push({ name: 'site', type: 'string', required: false });
   if (command === 'profile configure') flags.push({ name: 'file', type: 'string', required: true });
   const seen = new Set<string>();
   const values: Record<string, string> = {};
@@ -104,23 +106,35 @@ export async function main(args: string[]): Promise<number> {
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
-        output: command === 'info' ? 'Bounded JSON information response with redaction; application schema validation pending B1.2a.' : 'No vendor output until implemented. This operation fails before network access.',
+        output: operation.status === 'implemented' ? 'Validated application/site data with actual Network version and selected contract; writes unavailable.' : 'No vendor output until implemented. This operation fails before network access.',
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
         })), examples: [`unifi-axi ${command} --help`, example] });
     }
     return output({ command: command || 'unifi-axi', description,
+      ...(extra ? { summary: extra.summary, status: extra.status } : {}),
       flags: flags.map(flag => `--${flag.name}${flag.type === 'switch' ? '' : ' <value>'}`),
       commands: command ? children.map(({ command, status }) => ({ command, status })) :
         [...auxiliary, ...catalogue].map(({ command, status }) => ({ command, status })),
-      examples: ['unifi-axi commands', 'unifi-axi info --help', 'unifi-axi auth status'] });
+      examples: command === 'doctor' ? ['unifi-axi doctor', 'unifi-axi doctor --profile <name>', 'unifi-axi doctor --config <absolute-path>'] :
+        ['unifi-axi commands', 'unifi-axi info --help', 'unifi-axi auth status'] });
   }
   if (command === 'commands') {
     return output({ count: catalogue.length, commands: catalogue.map(({ id, command, effect, status }) => ({ id, command, effect, status })),
       help: ['unifi-axi info --help', 'unifi-axi site list --help'] });
   }
-  if (['auth status', 'profile list', 'profile configure', 'config path', 'info'].includes(command)) {
+  if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path', 'info', 'site list'].includes(command)) {
     const redactor = new Redactor();
+    let api: Awaited<ReturnType<typeof application>>['api'] | undefined;
+    const executable = resolve(process.argv[1]!);
+    const home = homedir();
+    const identity = command === '' ? {
+      bin: executable.startsWith(`${home}/`) || executable.startsWith(`${home}\\`) ? `~${executable.slice(home.length)}` : executable,
+      description,
+    } : {};
+    const quote = (value: string) => /^[\w./:-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+    let profileContext = values.profile ? ` --profile ${quote(values.profile)}` : '';
+    const configContext = values.config ? ` --config ${quote(values.config)}` : '';
     try {
       const path = configPath(values.config);
       const profiles = new Profiles(path);
@@ -132,6 +146,7 @@ export async function main(args: string[]): Promise<number> {
         return output({ profile: { name: values.profile, configured: true }, config: { path } });
       }
       const selected = await profiles.select(values.profile);
+      if (selected.source === 'file') profileContext = ` --profile ${quote(selected.name)}`;
       const secret = await profiles.secret(selected.profile, redactor);
       if (command === 'auth status') {
         const ref = selected.profile.apiKey;
@@ -139,22 +154,40 @@ export async function main(args: string[]): Promise<number> {
           source: selected.source, secretSource: 'env' in ref ? `env:${ref.env}` : `file:${ref.file}` } })));
         return 0;
       }
-      console.log(redactor.text(encode({ information: redactor.payload(await readInformation(selected.profile, secret)),
-        validation: 'Transport verified; application schema and version selection pending B1.2a.' } as Parameters<typeof encode>[0])));
-      return 0;
+      const result = await application(selected.profile, secret);
+      api = result.api;
+      const emit = (value: Record<string, unknown>, code = 0) => {
+        console.log(redactor.text(encode(redactor.payload({ ...identity, ...value }) as Parameters<typeof encode>[0])));
+        return code;
+      };
+      if (!result.api.contract) return emit({ ...result,
+        error: { code: 'UNVERIFIED_API_VERSION', message: 'Unknown Network application version. Select a shipped apiContract in the profile for read-only investigation.' } }, 1);
+      if (command === 'info' || command === 'doctor') return emit({ ...result,
+        ...(command === 'doctor' ? { doctor: { credentials: 'resolved', tls: 'verified', application: 'accessible' } } : {}) });
+      const listing = await sites(selected.profile, secret, values);
+      const requested = values.site ?? selected.profile.siteId;
+      const context = `${profileContext}${configContext}`;
+      let siteId: string | undefined;
+      try {
+        if (command === '' || requested !== undefined || listing.sites.length === 1) siteId = selectSite(listing.sites, requested);
+      } catch (error) {
+        if (!(error instanceof ToolError)) throw error;
+        return emit({ ...result, ...listing, error: { code: error.code, message: error.message },
+          help: [`unifi-axi site list${context}`, `unifi-axi${context} --site <site-id>`] }, 1);
+      }
+      const scope = `${context}${siteId ? ` --site ${quote(siteId)}` : ' --site <site-id>'}`;
+      return emit({ ...result, ...listing, selectedSite: siteId ?? null,
+        help: [`unifi-axi device list${scope}`, `unifi-axi site list${scope}`] });
     } catch (error) {
       const known = error instanceof ToolError;
-      console.log(redactor.text(encode({ error: { code: known ? error.code : 'CONFIG_INVALID',
-        message: known ? error.message : 'Unable to read or write protected configuration.' } })));
+      const context = `${profileContext}${configContext}`;
+      console.log(redactor.text(encode({ ...identity, ...(api ? { api } : {}), error: { code: known ? error.code : 'CONFIG_INVALID',
+        message: known ? error.message : 'Unable to read or write protected configuration.' },
+        help: [`unifi-axi auth status${context}`,
+          `unifi-axi profile configure${profileContext || ' --profile <name>'}${configContext} --file <absolute-profile-json>`,
+          ...(['', 'site list'].includes(command) ? [`unifi-axi site list${context}${values.site ? ` --site ${quote(values.site)}` : ''}`] : [])] })));
       return 1;
     }
-  }
-  if (command === '') {
-    const executable = resolve(process.argv[1]!);
-    const home = homedir();
-    return output({ bin: executable.startsWith(`${home}/`) || executable.startsWith(`${home}\\`) ? `~${executable.slice(home.length)}` : executable,
-      description, error: { code: 'PROFILE_REQUIRED', message: 'No usable profile. Credential configuration is available in B1.2; live home data is not yet implemented.' },
-      help: ['unifi-axi commands', 'unifi-axi auth status', 'unifi-axi --help'] }, 1);
   }
   if (operation || extra) {
     return output({ error: { code: 'NOT_IMPLEMENTED', message: 'This command is not implemented. No network request was sent.' },

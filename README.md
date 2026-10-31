@@ -3,10 +3,10 @@
 An agent-facing CLI for the official UniFi Network Integration API.
 Package: `@knowttl/unifi-axi`.
 
-B1.2 adds protected profile references, offline credential status and verified HTTPS transport.
+B1.2a adds application version validation, site discovery, doctor and a configured live home to the protected profiles and verified HTTPS transport from B1.2.
 All 73 vendor operations are discoverable.
-`info` performs one bounded GET after TLS verification, with `transport-only` status until application schema validation in B1.2a.
-The other 72 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
+`info` and `site list` are implemented with the minimal application and site schemas shared by the two retained contracts.
+The other 71 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
 
@@ -24,7 +24,35 @@ Bare `-v`, `-V` and `--version` print the package version before loading the cat
 Without a profile the home view exits 1 with `PROFILE_REQUIRED` and setup guidance.
 `auth status` resolves protected references offline and reports only profile, origin and source.
 No profiles, an absent named profile, ambiguous selection and an unavailable key produce distinct `PROFILE_REQUIRED`, `PROFILE_NOT_FOUND`, `PROFILE_AMBIGUOUS` and `AUTH_REQUIRED` errors.
-Live home data, application/site interpretation, doctor and session setup belong to later tasks.
+With a configured profile, the home view reads application information and a bounded site list.
+`doctor` resolves protected credentials, verifies TLS and reads application information only.
+Session setup belongs to a later task.
+
+## Application and sites
+
+Every implemented live command bootstraps from the actual Network `applicationVersion`, separately from any Site Manager label.
+Output identifies the actual application version, selected contract, verification status and unavailable writes.
+Known versions 10.6.109 and 11.0.97 select their matching contract, regardless of a profile override.
+An unknown version returns `UNVERIFIED_API_VERSION` after the info read.
+A profile `apiContract` of 10.6.109 or 11.0.97 permits read-only investigation while output remains visibly `unverified` and retains the actual version.
+All writes remain unavailable, including profiles with write permissions enabled.
+
+`site list` enumerates pages and reports exact site UUIDs, internal references, names, returned `count`, `totalCount`, starting `offset` and `complete`.
+It accepts the official `--offset`, `--limit` and `--filter` query flags.
+The default limit is 25 per request; `--limit 0` reads metadata only and reports incomplete when rows remain.
+Enumeration still unfinished after 100 pages fails with `READ_INCOMPLETE`; malformed or inconsistent pages fail with `RESPONSE_INVALID`.
+An empty result at or beyond `totalCount` reports `count: 0` and `complete: true`, preserving the requested `offset` and upstream `totalCount`.
+
+Select a site with `--site <site-id>`, then the profile's `siteId`, then the sole discovered site.
+Site discovery works without selection; without an explicit or profile selection, home reports `SITE_AMBIGUOUS` for multiple sites and `SITE_REQUIRED` when no sites exist.
+An explicit selection survives contextual hints along with the selected file profile and explicit configuration path.
+This stage sends no site-specific request.
+
+```text
+unifi-axi doctor --profile lab
+unifi-axi site list --profile lab
+unifi-axi --profile lab --site <site-id>
+```
 
 ## Credentials and transport
 
@@ -81,7 +109,7 @@ Private key PEM, mismatched fingerprints and unknown TLS options are refused.
 The route changes only the TCP destination; the origin remains the TLS name and HTTP Host.
 Chain, validity, hostname and peer pin checks finish before any authenticated HTTP request.
 There is no TLS bypass flag.
-Information responses are bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
+Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
 
 The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
 WAN, VPN and RADIUS changes, UniFi OS backup/restore, firmware upgrades and administrator management are absent from those contracts.
@@ -106,6 +134,7 @@ pnpm install --frozen-lockfile
 pnpm check
 pnpm verify:packaged -- --task B1.1
 pnpm verify:packaged -- --task B1.2
+pnpm verify:packaged -- --task B1.2a
 ```
 
 `pnpm check` runs strict types, lint and all implemented packaged obligations.
@@ -118,7 +147,8 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2` and the default implemented suite are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a` and the default implemented suite are supported now.
+The B1.2a journey reuses the credential suite's synthetic TLS setup and drives installed info, doctor, site list and home against independently seeded HTTPS responses.
 Unknown, future, empty and duplicate selectors fail rather than skip.
 Future stage tasks remain unimplemented; a B1.1 pass does not complete B1.
 Run the same selector on native Windows for separate Windows evidence.

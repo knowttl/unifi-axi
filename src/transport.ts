@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import type { Profile } from './profiles.js';
 import { ToolError } from './security.js';
 
-export async function readInformation(profile: Profile, apiKey: string): Promise<unknown> {
+export async function readJson(profile: Profile, apiKey: string, path: string): Promise<unknown> {
   const origin = new URL(profile.origin);
   const hostname = origin.hostname.replace(/^\[|\]$/g, '');
   // No HTTP bytes or credentials are written until chain, name, validity and pin pass.
@@ -32,7 +32,7 @@ export async function readInformation(profile: Profile, apiKey: string): Promise
   agent.createConnection = () => socket;
   try {
     return await new Promise<unknown>((resolve, reject) => {
-      const call = request(new URL('/proxy/network/integration/v1/info', origin), {
+      const call = request(new URL(`/proxy/network/integration${path}`, origin), {
         method: 'GET', agent,
         headers: { 'X-API-KEY': apiKey, Accept: 'application/json' },
       }, response => {
@@ -40,13 +40,13 @@ export async function readInformation(profile: Profile, apiKey: string): Promise
         let size = 0;
         response.on('data', (chunk: Buffer) => {
           size += chunk.length;
-          if (size > 1024 * 1024) { response.destroy(); reject(new ToolError('RESPONSE_INVALID', 'Information response exceeds limit.')); }
+          if (size > 1024 * 1024) { response.destroy(); reject(new ToolError('RESPONSE_INVALID', 'API response exceeds limit.')); }
           else chunks.push(chunk);
         });
         response.once('error', reject);
         response.once('end', () => {
-          if (response.statusCode !== 200) return reject(new ToolError('UPSTREAM_ERROR', `Information request failed (HTTP ${response.statusCode}).`));
-          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new ToolError('RESPONSE_INVALID', 'Information response is not JSON.')); }
+          if (response.statusCode !== 200) return reject(new ToolError('UPSTREAM_ERROR', `API request failed (HTTP ${response.statusCode}).`));
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new ToolError('RESPONSE_INVALID', 'API response is not JSON.')); }
         });
       });
       call.setTimeout(5000, () => call.destroy(new Error('HTTP timeout')));
@@ -55,6 +55,6 @@ export async function readInformation(profile: Profile, apiKey: string): Promise
     });
   } catch (error) {
     if (error instanceof ToolError) throw error;
-    throw new ToolError('TRANSPORT_FAILED', 'Information request failed.');
+    throw new ToolError('TRANSPORT_FAILED', 'API request failed.');
   } finally { agent.destroy(); socket.destroy(); }
 }

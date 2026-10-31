@@ -10,8 +10,8 @@ import { verifyCredentials } from '../test/credentials.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0'].includes(args[1])),
-  'Only implemented tasks B1.1, B1.2, B1.2a and B2.0 are selectable. Unknown, future, duplicate or incomplete selectors fail.');
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5'].includes(args[1])),
+  'Select an implemented task. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
 const user = join(temporary, 'user');
@@ -21,7 +21,11 @@ const networkLog = join(temporary, 'network-attempts');
 const guard = fileURLToPath(new URL('../test/fixtures/no-network.mjs', import.meta.url));
 const sourcePackage = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const expected = JSON.parse(readFileSync(join(root, 'test/fixtures/catalogue.json'), 'utf8'));
-const expectedStatus = command => ['info', 'site list'].includes(command) ? 'implemented' : 'not-implemented';
+const implemented = ['info', 'site list', 'country list', 'dpi application list', 'dpi category list', 'device pending list',
+  'device-tag list', 'radius profile list', 'vpn server list', 'vpn site-to-site-tunnel list', 'wan list',
+  'device list', 'device show', 'device statistics latest', 'client list', 'client show', 'network list', 'network show', 'network references'];
+const expectedStatus = command => implemented.includes(command) ? 'implemented' : 'not-implemented';
+const detail = ['device show', 'device statistics latest', 'client show', 'network show', 'network references'];
 const pnpmScript = process.env.npm_execpath;
 assert.ok(pnpmScript, 'Run this entry through pnpm verify:packaged');
 
@@ -100,8 +104,8 @@ try {
     assert.equal(help.path, operation.path);
     assert.equal(help.status, expectedStatus(operation.command));
     assert.deepEqual(help.examples[0], `unifi-axi ${operation.command} --help`);
-    const unfinished = decode(cli(words, 1, { UNIFI_AXI_ORIGIN: 'https://127.0.0.1:9' }));
-    assert.equal(unfinished.error.code, expectedStatus(operation.command) === 'implemented' ? 'CONFIG_INVALID' : 'NOT_IMPLEMENTED');
+    const unfinished = decode(cli(words, detail.includes(operation.command) ? 2 : 1, { UNIFI_AXI_ORIGIN: 'https://127.0.0.1:9' }));
+    assert.equal(unfinished.error.code, detail.includes(operation.command) ? 'INVALID_ARGUMENT' : expectedStatus(operation.command) === 'implemented' ? 'CONFIG_INVALID' : 'NOT_IMPLEMENTED');
     const unknown = decode(cli([...words, '--misspelled'], 2, { UNIFI_AXI_ORIGIN: 'https://127.0.0.1:9' }));
     assert.equal(unknown.error.code, 'UNKNOWN_FLAG');
     assert.equal(unknown.help[0].includes('--help'), true);

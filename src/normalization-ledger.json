@@ -18,5 +18,25 @@
       "negative": ["2", 0, 5]
     }
   ],
+  "nullResponses": [
+    {
+      "id": "NORM-001", "version": "10.6.109",
+      "pointer": "#/components/schemas/Network details/properties/dhcpGuarding",
+      "sourceHash": "2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c",
+      "fieldHash": "6253738ff5edd0d06253c8efb45cee574c397334175d8dd405908d956ed9f0e3",
+      "interpretation": "Accept omitted or explicit null as disabled at this response field only. Preserve the value without coercion.",
+      "reviewer": "B2.5 approved response-side NORM-001 specification",
+      "positive": [null], "negative": ["disabled", false]
+    },
+    {
+      "id": "NORM-001", "version": "11.0.97",
+      "pointer": "#/components/schemas/Network details/properties/dhcpGuarding",
+      "sourceHash": "0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66",
+      "fieldHash": "6253738ff5edd0d06253c8efb45cee574c397334175d8dd405908d956ed9f0e3",
+      "interpretation": "Accept omitted or explicit null as disabled at this response field only. Preserve the value without coercion.",
+      "reviewer": "B2.5 approved response-side NORM-001 specification",
+      "positive": [null], "negative": ["disabled", false]
+    }
+  ],
   "futureResolutionRequiredFields": ["version", "pointer", "sourceHash", "fieldHash", "interpretation", "reviewer", "positive", "negative"]
 }

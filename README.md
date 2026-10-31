@@ -8,7 +8,8 @@ B1.3 adds an opt-in first-read proof through a reviewed, temporary local Artium 
 Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
 `info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
-The other 71 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
+Supporting catalogues, WAN/VPN overviews, devices, clients and networks provide 17 additional read commands.
+The remaining 54 vendor operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
 
@@ -52,13 +53,42 @@ An empty result at or beyond `totalCount` reports `count: 0` and `complete: true
 Select a site with `--site <site-id>`, then the profile's `siteId`, then the sole discovered site.
 Site discovery works without selection; without an explicit or profile selection, home reports `SITE_AMBIGUOUS` for multiple sites and `SITE_REQUIRED` when no sites exist.
 An explicit selection survives contextual hints along with the selected file profile and explicit configuration path.
-This stage sends no site-specific request.
+Inventory reads use the selected site for every resource request.
 
 ```text
 unifi-axi doctor --profile lab
 unifi-axi site list --profile lab
 unifi-axi --profile lab --site <site-id>
 ```
+
+## Inventory, clients, networks and references
+
+`country list`, `dpi application list`, `dpi category list`, `device pending list`, `device-tag list`, `radius profile list`, `vpn server list`, `vpn site-to-site-tunnel list` and `wan list` enumerate the documented supporting records.
+`device list`, `client list` and `network list` enumerate inventory for the selected site.
+These lists use the same bounded paging and completeness metadata as `site list`.
+Filters are forwarded unchanged where the documented operation accepts them; WAN does not accept a filter.
+Country codes and numeric DPI IDs keep their original types.
+WAN and VPN output contains documented overview fields only.
+VPN `metadata.source` is returned only for `DERIVED` site-to-site tunnels.
+Missing totals or invalid page shapes fail with `RESPONSE_INVALID` instead of claiming completeness.
+
+`device show --device-id <id>`, `device statistics latest --device-id <id>`, `client show --client-id <id>` and `network show --network-id <id>` address the exact selected resource.
+Required resource IDs are checked before credentials or network access.
+An upstream missing or cross-site resource returns `UPSTREAM_ERROR`; no similar resource is substituted.
+`network references --network-id <id>` includes the selected network's ID and name and the complete documented reference response.
+
+```text
+unifi-axi device list --site <site-id>
+unifi-axi client show --site <site-id> --client-id <client-id>
+unifi-axi network references --site <site-id> --network-id <network-id>
+```
+
+Responses preserve gateway, switch and unmanaged network fields and validate their selected subtype.
+Response-side NORM-001 accepts omitted or explicit null `dhcpGuarding` as disabled, preserving null in output.
+Other null fields must satisfy the original schema; request-side normalization remains unavailable.
+Validation failures include the offending field path without echoing its value.
+The approved 10.6.109 PoE resolution preserves integer values without coercion and rejects strings.
+All 11.0.97 device reads remain blocked with `CONTRACT_CONFLICT` for unresolved CF-007; its integer type and string enum disagree, and no 11.0.97 override is approved.
 
 ## Credentials and transport
 
@@ -124,7 +154,7 @@ HTTP 401 is never retried.
 HTTP 429 retries only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
 Redirects are refused without sending credentials to the destination.
 Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
-Response byte-budget failures return `READ_INCOMPLETE`; request deadline failures return `TIMEOUT`, which site enumeration converts to `READ_INCOMPLETE` with progress guidance.
+Response byte-budget failures return `READ_INCOMPLETE`; request deadline failures return `TIMEOUT`, which paginated list enumeration converts to `READ_INCOMPLETE` with progress guidance.
 
 The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
 WAN, VPN and RADIUS changes, UniFi OS backup/restore, firmware upgrades and administrator management are absent from those contracts.
@@ -141,14 +171,15 @@ The credential schema ships as `dist/axi-credential.schema.json` with `apiKey` m
 The validation compiler checks the retained source hashes and compiles each version independently without changing its source.
 It supports the validation keywords present in those contracts and rejects unsupported keywords.
 Discriminator dispatch follows the recorded interpretation in [the normalization ledger](src/normalization-ledger.json).
-Required fields, nullability and additional-property rules retain their recorded meaning.
+Required fields and additional-property rules retain their recorded meaning.
+Nullability follows the source schema except for the response-only rules in the normalization ledger.
 UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI formats remain annotations.
 
 [The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations, contract cases and resolution status.
 The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
-Unresolved conflicts block only the affected command families when their response validators are requested.
+Unresolved structural conflicts block operations whose response schemas reach the conflicting field, with the retained device-family exception described in [Inventory, clients, networks and references](#inventory-clients-networks-and-references).
 Application and site validation remain available.
-The normalization ledger owns the reviewed PoE resolution, its version scope and expectations, and the required fields for future resolutions.
+The normalization ledger owns the reviewed PoE resolution and response-side NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
 
 ## Development and verification
 
@@ -179,7 +210,8 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0` and the default implemented suite are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, `--task B2.2`, `--task B2.3`, `--task B2.4`, `--task B2.5` and the default implemented suite are supported now.
+The B2.2-B2.5 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants and the retained 11.0.97 device gate.
 The B2.0 journey adds installed-executable paging, retry, redirect, body-budget and deadline checks plus direct transport concurrency checks against the same synthetic TLS service.
 `verify:contracts` separately exercises schema roots, enum versions, required fields, nullable conflicts and added fields against independently selected synthetic contract fixtures.
 The B1.2a journey reuses the credential suite's synthetic TLS setup and drives installed info, doctor, site list and home against independently seeded HTTPS responses.
@@ -203,7 +235,7 @@ pnpm verify:artium --host /absolute/task-owned/artium --output /absolute/externa
 
 The real host CLI talks to the real loopback server, parser, shared v2 profile writer and runner.
 Only task-owned loopback vendor and host ports are reachable through the Node socket guard in the host, client and packaged child.
-The proof checks typed info/sites for both retained versions, competing developer profiles, admission failures before vendor access, read journal classification, cancellation, deadlines, output bounds and private input cleanup.
+The proof checks typed info/sites and the combined B2.2-B2.5 read journey for both retained versions, competing developer profiles, admission failures before vendor access, read journal classification, cancellation, deadlines, output bounds and private input cleanup.
 The fixture-only input consumer is host evidence and adds no command to the UniFi package.
 The host's shorter deadline remains distinct from the package request deadline described in [Credentials and transport](#credentials-and-transport).
 The verifier writes provenance, package integrity, effective limits and native platform results to `artium-proof.json` outside this repository, and removes synthetic TLS keys and scratch state.

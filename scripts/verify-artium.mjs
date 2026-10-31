@@ -9,6 +9,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decode } from '@toon-format/toon';
 import { guardEgress } from '../test/fixtures/fake-egress.mjs';
+import { verifyInventory } from '../test/inventory.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
@@ -51,6 +52,7 @@ let identity = 'normal';
 let rejectAfterStaging = false;
 let stagingRejections = 0;
 let activeCli;
+let inventoryHandler;
 const terminalEvents = new EventEmitter();
 const first = { id: '9361553d-e20d-45b8-a516-6948ab010011', internalReference: 'north', name: 'North synthetic lab' };
 const second = { id: '5925a212-9b6e-402b-a675-c658ab010022', internalReference: 'south', name: 'South synthetic lab' };
@@ -113,6 +115,11 @@ try {
     assert.equal(request.method, 'GET');
     assert.equal(request.headers['x-api-key'], canary, 'Only the host-owned synthetic key reaches the vendor');
     response.setHeader('content-type', 'application/json');
+    if (inventoryHandler) {
+      const body = inventoryHandler(request, response);
+      if (body !== undefined) response.end(JSON.stringify(body));
+      return;
+    }
     if (url.pathname.endsWith('/info')) {
       const body = mode === 'bad-info' ? { applicationVersion: 11 } : { applicationVersion: version, siteManagerVersion: '5.2.23' };
       response.end(JSON.stringify(body));
@@ -250,6 +257,17 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
       cleanupObserved();
     }
   }
+  await verifyInventory({
+    cli: async (words, status = 0) => {
+      const result = decode((await cli(['unifi-axi', ...words], status)).stdout);
+      cleanupObserved();
+      return result;
+    },
+    seed: handler => { inventoryHandler = handler; },
+  });
+  inventoryHandler = undefined;
+  record('STEP-B2.2/STEP-B2.3/STEP-B2.4/STEP-B2.5', { versions: ['10.6.109', '11.0.97'],
+    knownLimitation: '11.0.97 device reads remain blocked by CF-007' });
   for (const [bad, words] of [['bad-info', ['info']], ['bad-sites', ['site', 'list']]]) {
     mode = bad;
     assert.equal(decode((await cli(['unifi-axi', ...words], 1)).stdout).error.code, 'RESPONSE_INVALID');

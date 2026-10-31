@@ -1,12 +1,13 @@
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { encode } from '@toon-format/toon';
-import { catalogue, parameterFlag, type Operation, type Parameter } from './catalogue.js';
+import { catalogue, readOperations, parameterFlag, type Operation, type Parameter } from './catalogue.js';
 import { Profiles, configPath } from './profiles.js';
 import { Redactor, ToolError } from './security.js';
 import { application, sites, selectSite } from './application.js';
+import { readOperation } from './reads.js';
 
-const description = 'Read UniFi Network application and site information.';
+const description = 'Read UniFi Network application, inventory and network information.';
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
   { command: 'doctor', summary: 'Check protected credentials, TLS and the Network application version', status: 'implemented' },
@@ -106,7 +107,7 @@ export async function main(args: string[]): Promise<number> {
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
-        output: operation.status === 'implemented' ? 'Validated application/site data with actual Network version and selected contract; writes unavailable.' : 'No vendor output until implemented. This operation fails before network access.',
+        output: operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract; writes unavailable.' : 'No vendor output until implemented. This operation fails before network access.',
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
         })), examples: [`unifi-axi ${command} --help`, example] });
@@ -123,7 +124,11 @@ export async function main(args: string[]): Promise<number> {
     return output({ count: catalogue.length, commands: catalogue.map(({ id, command, effect, status }) => ({ id, command, effect, status })),
       help: ['unifi-axi info --help', 'unifi-axi site list --help'] });
   }
-  if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path', 'info', 'site list'].includes(command)) {
+  if (operation && readOperations.has(operation.id)) {
+    const missing = flags.find(flag => flag.required && flag.name !== 'site' && !values[flag.name]);
+    if (missing) return usage('INVALID_ARGUMENT', `--${missing.name} is required.`, flags);
+  }
+  if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path', 'info', 'site list'].includes(command) || (operation && readOperations.has(operation.id))) {
     const redactor = new Redactor();
     let api: Awaited<ReturnType<typeof application>>['api'] | undefined;
     const executable = resolve(process.argv[1]!);
@@ -164,6 +169,14 @@ export async function main(args: string[]): Promise<number> {
         error: { code: 'UNVERIFIED_API_VERSION', message: 'Unknown Network application version. Select a shipped apiContract in the profile for read-only investigation.' } }, 1);
       if (command === 'info' || command === 'doctor') return emit({ ...result,
         ...(command === 'doctor' ? { doctor: { credentials: 'resolved', tls: 'verified', application: 'accessible' } } : {}) });
+      if (operation && readOperations.has(operation.id)) {
+        const inputs = { ...values };
+        if (operation.path.includes('{siteId}') && !inputs.site) {
+          inputs.site = selected.profile.siteId ?? selectSite((await sites(selected.profile, secret, {}, result.api.contract)).sites);
+        }
+        return emit({ api, ...(inputs.site ? { selectedSite: inputs.site } : {}),
+          ...await readOperation(selected.profile, secret, operation, inputs, result.api.contract) });
+      }
       const listing = await sites(selected.profile, secret, values, result.api.contract);
       const requested = values.site ?? selected.profile.siteId;
       const context = `${profileContext}${configContext}`;

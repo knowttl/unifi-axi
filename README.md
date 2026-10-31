@@ -301,7 +301,7 @@ The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
 The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
 That command prints an explicit skip reason when no Artium host fixture is selected.
 The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
-Dependency installation may use the npm registry and does not require a pre-seeded pnpm store.
+Packaged verification installs dependencies offline and requires a pre-seeded pnpm store.
 It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.
 Offline discovery and credential commands run with a fail-closed network attempt recorder; transport checks use a local fake HTTPS controller.
 Domain code, command parsing and execution stay real.

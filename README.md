@@ -9,6 +9,7 @@ Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
 `info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
 Read coverage includes [inventory and networks](#inventory-clients-networks-and-references) and [policies, vouchers, Wi-Fi and switching](#policies-vouchers-wi-fi-and-switching), subject to the documented contract gates.
+Network creation and deletion support [previews and explicitly granted execution](#network-write-foundation).
 Use `unifi-axi commands` for each operation's implementation status; unimplemented operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
@@ -22,6 +23,7 @@ unifi-axi --version
 ```
 
 Output is TOON on stdout except for the bare version; errors use structured codes.
+`info` and `client list` accept the published `--full` compatibility switch; output is the same as without it.
 Unknown commands, unknown flags, duplicate flags and invalid scalar values exit 2.
 Bare `-v`, `-V` and `--version` print the package version before loading the catalogue.
 Without a profile the home view exits 1 with `PROFILE_REQUIRED` and setup guidance.
@@ -155,6 +157,7 @@ The initial body supports `name`, `management: "UNMANAGED"`, `enabled`, `vlanId`
 Gateway and switch creation variants remain pending.
 `network delete --network-id <id>` previews deletion of that exact network.
 Omitted `--force` and `--force false` normalize to the same request; `--force true` needs a new preview.
+Request site and network UUIDs normalize to lowercase before binding and dispatch; resource identity comparisons ignore UUID letter case.
 Both commands select a site through `--site`, the profile or unambiguous discovery.
 
 Execution requires `writes.allowWrites: true` and exact vendor grants in `writes.operations`: `createNetwork` plus `createNetwork:UNMANAGED` for creation, or `deleteNetwork` for deletion.
@@ -164,6 +167,7 @@ Repeat the previewed command with `--execute --confirm <confirmation> --request-
 Confirmation binds the complete normalized method, resolved path, query defaults, body, target set, selected resource state, origin, profile/config identity, credential reference and value hash, application version, contract hash, TLS leaf and connection route.
 Secret values are hashed internally and redacted from output.
 Identity, body input, grants and selected state are reread before dispatch, and changed bindings fail closed.
+Every write-related read, including site discovery, selected-state checks and recovery, enforces the TLS leaf and connection address captured by its initial application read before sending credentials.
 The vendor provides no atomic conditional write, so concurrent changes can still occur after that final read.
 
 Linux stores owner-only request claims under `$XDG_STATE_HOME/unifi-axi/writes.log/`, or the runtime home under `.local/state/unifi-axi/writes.log/`.
@@ -213,7 +217,7 @@ Omitting `apiKey` defaults to the `UNIFI_AXI_API_KEY` environment reference.
 An environment profile requires `UNIFI_AXI_ORIGIN` and `UNIFI_AXI_API_KEY`; optional fields are `UNIFI_AXI_SITE_ID`, `UNIFI_AXI_API_CONTRACT`, `UNIFI_AXI_TLS` and `UNIFI_AXI_WRITES`.
 The last two contain strict JSON objects.
 `UNIFI_AXI_READ_ONLY` accepts only `1`, `0`, `true` or `false`, case-insensitively.
-Write execution and `UNIFI_AXI_WRITE_LOG` custody arrive in later tasks; this version cannot mutate vendor state.
+See [Network write foundation](#network-write-foundation) for execution grants and journal custody.
 Inline secret values and secret flags are refused.
 File keys lose a leading BOM and trailing whitespace.
 Linux checks ownership and permissions before reading; secret files require owner-only permissions and configs cannot be group- or world-writable.
@@ -246,7 +250,7 @@ Reads retry transport failures and HTTP 502/503/504 at most twice with a 100 ms 
 Before TLS completes, transient connection failures (`ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, `EPIPE` and socket hang-up) are eligible for those retries.
 Certificate chain, validity, hostname and peer pin rejections fail with `TLS_REJECTED` without retrying or sending an authenticated request.
 HTTP 401 is never retried.
-HTTP 429 retries only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
+Reads receiving HTTP 429 retry only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
 Redirects are refused without sending credentials to the destination.
 Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
 Response byte-budget failures return `READ_INCOMPLETE`; request deadline failures return `TIMEOUT`, which paginated list enumeration converts to `READ_INCOMPLETE` with progress guidance.
@@ -297,7 +301,7 @@ pnpm verify:contracts -- --task B2.1
 ```
 
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
-The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
+The opt-in Artium proof runs separately with `pnpm verify:artium`, extending B1.3 read coverage with B3.3 write-admission denials and reporting task `B3.3`.
 The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
 That command prints an explicit skip reason when no Artium host fixture is selected.
 The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
@@ -328,7 +332,7 @@ TLS tests generate temporary synthetic CAs, certificates and keys with OpenSSL, 
 No private keys are committed or retained.
 See [retained evidence](evidence/README.md) for original paths and manifest hashes.
 
-The B1.3 Linux proof requires a separate, built Artium fixture descended from revision `3cfc65afc2d7c1a0f50d2f6e02dc2ee13d6fd7e8`, with the reviewed B1.3 delta and current package installed.
+The Artium Linux proof requires a separate, built fixture descended from revision `3cfc65afc2d7c1a0f50d2f6e02dc2ee13d6fd7e8`, with the reviewed B1.3 delta and current package installed.
 The installed package's runtime assets must match this checkout's current `dist` build.
 Both paths must be absolute; the output directory must already exist outside this repository and must not contain a `scratch` entry.
 It never edits the shared fixture checkout or connects to a controller.

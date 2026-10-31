@@ -67,7 +67,8 @@ export async function readOperation(profile: Profile, secret: string, operation:
       page.data = page.data.map(row => Object.fromEntries(Object.entries(row)
         .filter(([field]) => fields.includes(field))
         .map(([field, value]) => [field, field === 'metadata' ? Object.fromEntries(Object.entries(value as RecordData)
-          .filter(([key]) => ['origin', 'source'].includes(key))) : value])));
+          .filter(([key]) => key === 'origin' || (key === 'source' && operation.id === 'OP-067' &&
+            (value as RecordData).origin === 'DERIVED'))) : value])));
     }
     return page;
   }, row => String(row[operation.id === 'OP-003' ? 'code' : operation.id === 'OP-006' ? 'macAddress' : 'id']),

@@ -46,7 +46,8 @@ export async function verifyInventory({ cli, seed }) {
         continue;
       }
       const second = next ?? { ...first, ...(first.id ? { id: secondId } : {}),
-        ...(first.macAddress ? { macAddress: '02:00:00:00:00:02' } : {}) };
+        ...(first.macAddress ? { macAddress: '02:00:00:00:00:02' } : {}),
+        ...(key === 'vpnTunnels' ? { metadata: { origin: 'DERIVED', source: 'SDWAN' } } : {}) };
       const records = [first, second];
       const filter = "name.ne('excluded')";
       serve(url => {
@@ -55,7 +56,8 @@ export async function verifyInventory({ cli, seed }) {
         const offset = Number(url.searchParams.get('offset'));
         const selected = records[offset];
         const data = ['vpnServers', 'vpnTunnels', 'wans'].includes(key) ?
-          [{ ...selected, connectionConfiguration: { address: '192.0.2.99' }, ...(key === 'wans' ? { type: 'undocumented' } : {}) }] : [selected];
+          [{ ...selected, connectionConfiguration: { address: '192.0.2.99' }, ...(key === 'wans' ? { type: 'undocumented' } :
+            selected.metadata.origin === 'USER_DEFINED' ? { metadata: { ...selected.metadata, source: 'unexpected' } } : {}) }] : [selected];
         return { offset, limit: 1, count: 1, totalCount: 2, data };
       });
       const result = await cli([...scoped(command), '--limit', '1', ...(command === 'wan list' ? [] : ['--filter', filter])]);

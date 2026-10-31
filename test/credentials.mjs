@@ -12,8 +12,9 @@ import { verifyInventory } from './inventory.mjs';
 import { verifyPolicies } from './policies.mjs';
 import { guardEgress } from './fixtures/fake-egress.mjs';
 
-export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false }) {
+export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false, writeTask }) {
   const inventoryRows = [];
+  let fakePort;
   const home = join(temporary, 'credentials');
   mkdirSync(home, { mode: 0o700 });
   const config = join(home, 'config with spaces.json');
@@ -21,7 +22,6 @@ export async function verifyCredentials({ executable, installed, temporary, env,
   const syntheticKey = 'synthetic-"key+/=%';
   const redactedForms = [syntheticKey, JSON.stringify(syntheticKey).slice(1, -1), encodeURIComponent(syntheticKey)];
   const source = { origin: 'https://localhost:9', apiKey: { env: 'SYNTHETIC_KEY' } };
-  const fakeGuard = join(home, 'fake-guard.ts');
   function protectWindows(path) {
     if (process.platform !== 'win32') return;
     const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
@@ -56,8 +56,10 @@ Set-Acl -LiteralPath $p -AclObject $acl
   configure();
 
   async function cli(args, code = 0, overrides = {}, guarded = true) {
-    const child = spawn(process.execPath, ['--import', guarded ? guard : fakeGuard, executable, ...args], {
-      cwd: home, env: { ...env, UNIFI_AXI_CONFIG: config, ...overrides }, stdio: ['ignore', 'pipe', 'pipe'],
+    const child = spawn(process.execPath, [...(guarded ? ['--import', guard] : []), executable, ...args], {
+      cwd: home, env: { ...env, UNIFI_AXI_CONFIG: config,
+        ...(!guarded ? { NODE_OPTIONS: `--import=${new URL('./fixtures/write-guard.ts', import.meta.url).pathname}`, UNIFI_AXI_TEST_PORT: String(fakePort) } : {}),
+        ...overrides }, stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 15000,
     });
     let stdout = '', stderr = '';
@@ -65,11 +67,12 @@ Set-Acl -LiteralPath $p -AclObject $acl
     child.stderr.on('data', value => { stderr += value; });
     const [status, signal] = await once(child, 'close');
     assert.equal(signal, null, stdout + stderr);
-    assert.equal(status, code, `${args.join(' ')}\n${stdout}${stderr}`);
+    if (code === -1) assert.ok([0, 1].includes(status), `${args.join(' ')}\n${stdout}${stderr}`);
+    else assert.equal(status, code, `${args.join(' ')}\n${stdout}${stderr}`);
     assert.equal(stderr, '');
     for (const key of redactedForms) assert.equal((stdout + stderr).includes(key), false, 'No raw, escaped or encoded key in retained output');
     assert.equal(existsSync(env.UNIFI_AXI_TEST_NETWORK_LOG), false, 'Offline command attempted network');
-    return decode(stdout);
+    return code === 99 ? { interrupted: true } : decode(stdout);
   }
   const status = (args = [], overrides = {}, code = 0) => cli(['auth', 'status', ...args], code, overrides);
   const error = async (expected, profiles, args = [], overrides = {}) => {
@@ -184,10 +187,8 @@ Set-Acl -LiteralPath $p -AclObject $acl
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const port = server.address().port;
-  const guardSource = new URL('./fixtures/fake-egress.mjs', import.meta.url).href;
-  write(fakeGuard, `import { guardEgress } from ${JSON.stringify(guardSource)};\nimport { appendFileSync } from 'node:fs';\nguardEgress([${port}], () => appendFileSync(${JSON.stringify(env.UNIFI_AXI_TEST_NETWORK_LOG)}, 'network-attempt\\n'));\n`);
-  const denied = () => appendFileSync(env.UNIFI_AXI_TEST_NETWORK_LOG, 'network-attempt\n');
-  guardEgress([port], denied);
+  fakePort = port;
+  guardEgress([port], () => appendFileSync(env.UNIFI_AXI_TEST_NETWORK_LOG, 'network-attempt\n'));
   const origin = `https://localhost:${port}`;
   const tls = name => ({ trustedCertificatePem: cert(name), peerFingerprintSha256: fingerprint(name), connectAddress: '127.0.0.1' });
   try {
@@ -249,6 +250,14 @@ Set-Acl -LiteralPath $p -AclObject $acl
         cli: (args, code = 0) => cli(args, code, keys, false),
         seed: handler => { requests = []; respond = handler; },
       }));
+      if (writeTask) {
+        const { verifyWrites } = await import('./writes.ts');
+        inventoryRows.push(...await verifyWrites({
+          cli: (args, code = 0, overrides = {}) => cli(args, code, { ...keys, ...overrides }, false),
+          configure, trusted, home, config, port, syntheticKey, task: writeTask,
+          seed: handler => { requests = []; respond = handler; }, requests: () => requests,
+        }));
+      }
     }
   } finally {
     server.closeAllConnections();

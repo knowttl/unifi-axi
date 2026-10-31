@@ -59,6 +59,34 @@ export class PrivateFiles {
     return new ToolError('CONFIG_INSECURE', `Unsafe private file: ${path}. ${this.platform === 'win32' ? 'Re-run profile configure to apply a protected Windows ACL.' : `Use chmod 600 '${path}'.`}`);
   }
 
+  async directory(path: string, exclusive = false): Promise<void> {
+    const created = await mkdir(path, { recursive: !exclusive, mode: 0o700 });
+    await this.verifyDirectory(path);
+    if (this.platform === 'win32') this.acl(path, 'restrict', true);
+    if (created || exclusive) {
+      const stop = dirname(created ?? path);
+      for (let current = path; ; current = dirname(current)) {
+        await this.syncDirectory(current);
+        if (current === stop) break;
+      }
+    }
+  }
+
+  async verifyDirectory(path: string): Promise<void> {
+    const stat = await lstat(path);
+    if (!stat.isDirectory() || stat.isSymbolicLink() ||
+        (this.platform !== 'win32' && (stat.uid !== process.getuid!() || (stat.mode & 0o077) !== 0))) throw this.insecure(path);
+    if (this.platform === 'win32') this.acl(path, 'verify', true);
+  }
+
+  async syncDirectory(path: string): Promise<void> {
+    // Windows FlushFileBuffers does not support directory handles through Node.
+    // Keep native Windows writes unavailable until that durability boundary is proven.
+    if (this.platform === 'win32') throw new ToolError('WRITE_UNSUPPORTED', 'Durable native Windows writes are pending verification.');
+    const handle = await open(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    try { await handle.sync(); } finally { await handle.close(); }
+  }
+
   async read(path: string, secret = false): Promise<string> {
     const before = await lstat(path);
     if (!before.isFile() || before.isSymbolicLink()) throw this.insecure(path);

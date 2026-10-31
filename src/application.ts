@@ -1,7 +1,7 @@
 import { versions } from './catalogue.js';
-import type { Profile } from './profiles.js';
+import { writeAllowed, type Profile } from './profiles.js';
 import { ToolError } from './security.js';
-import { readJson } from './transport.js';
+import { readJson, readBudget, type PeerIdentity } from './transport.js';
 import { enumerate } from './paging.js';
 import { validateResponse } from './validation.js';
 
@@ -14,15 +14,16 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export async function application(profile: Profile, secret: string) {
-  const information = object(await readJson(profile, secret, '/v1/info'));
+export async function application(profile: Profile, secret: string, peer?: PeerIdentity) {
+  const information = object(await readJson(profile, secret, '/v1/info', readBudget(), peer));
   if (typeof information.applicationVersion !== 'string') invalid();
   const actual = information.applicationVersion;
   const verified = versions.some(version => version === actual);
   if (verified) validateResponse(actual, 'OP-001', information);
   return { information, api: { applicationVersion: actual,
     contract: verified ? actual : profile.apiContract ?? null,
-    status: verified ? 'verified' : 'unverified', writesAvailable: false } };
+    status: verified ? 'verified' : 'unverified', writesAvailable: verified && process.platform !== 'win32' &&
+      (writeAllowed(profile, ['deleteNetwork']) || writeAllowed(profile, ['createNetwork', 'createNetwork:UNMANAGED'])) } };
 }
 
 // Schema validation precedes pagination checks on safe local counters.

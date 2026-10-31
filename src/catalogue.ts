@@ -57,7 +57,7 @@ export const catalogue = commands.map(command => {
     method: primary.method,
     path: primary.path,
     effect: primary.method === 'GET' ? 'read' : 'write',
-    status: ['info', 'site list'].includes(command.command) || readOperations.has(command.id) ? 'implemented' : 'not-implemented',
+    status: ['info', 'site list'].includes(command.command) || readOperations.has(command.id) || ['OP-049', 'OP-050'].includes(command.id) ? 'implemented' : 'not-implemented',
     contracts: variants.map(({ version, parameters = [], requestBody, responses }) => ({
       version, source: `evidence/sources/network-${version}-openapi.json`,
       parameters, ...(requestBody ? { requestBody } : {}), responses,

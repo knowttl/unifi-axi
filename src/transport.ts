@@ -6,6 +6,14 @@ import { ToolError } from './security.js';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export interface ReadBudget { deadline: number; bytes: number }
+export interface PeerIdentity { leaf: string; address: string }
+interface Mutation {
+  method: string;
+  body: string | undefined;
+  status: number;
+  peer: PeerIdentity;
+  beforeSend: () => Promise<void>;
+}
 export function readBudget(): ReadBudget { return { deadline: Date.now() + 30_000, bytes: 8 * 1024 * 1024 }; }
 
 let active = 0;
@@ -15,7 +23,7 @@ class Retryable extends ToolError {
   constructor(readonly wait: number) { super('UPSTREAM_ERROR', 'API temporarily unavailable.'); }
 }
 
-export async function readJson(profile: Profile, apiKey: string, path: string, budget = readBudget()): Promise<unknown> {
+export async function readJson(profile: Profile, apiKey: string, path: string, budget = readBudget(), peer?: PeerIdentity): Promise<unknown> {
   const deadline = Math.min(budget.deadline, Date.now() + 10_000);
   const timeout = () => new ToolError('TIMEOUT', 'API request exceeded its deadline.');
   if (active >= 2) {
@@ -31,7 +39,7 @@ export async function readJson(profile: Profile, apiKey: string, path: string, b
   try {
     for (let attempt = 0; ; attempt++) {
       if (Date.now() >= deadline) throw timeout();
-      try { return await requestJson(profile, apiKey, path, deadline, budget, attempt < 2); }
+      try { return await requestJson(profile, apiKey, path, deadline, budget, attempt < 2, peer); }
       catch (error) {
         if (!(error instanceof Retryable) || attempt >= 2) throw error;
         if (Date.now() + error.wait >= deadline) throw timeout();
@@ -45,7 +53,13 @@ export async function readJson(profile: Profile, apiKey: string, path: string, b
   }
 }
 
-async function requestJson(profile: Profile, apiKey: string, path: string, expires: number, budget: ReadBudget, retry: boolean): Promise<unknown> {
+// Mutations deliberately bypass the read retry loop.
+export async function sendMutation(profile: Profile, apiKey: string, path: string, mutation: Mutation): Promise<unknown> {
+  return requestJson(profile, apiKey, path, Date.now() + 10_000, readBudget(), false, undefined, mutation);
+}
+
+async function requestJson(profile: Profile, apiKey: string, path: string, expires: number, budget: ReadBudget, retry: boolean,
+  identity?: PeerIdentity, mutation?: Mutation): Promise<unknown> {
   const origin = new URL(profile.origin);
   const hostname = origin.hostname.replace(/^\[|\]$/g, '');
   // No HTTP bytes or credentials are written until chain, name, validity and pin pass.
@@ -62,7 +76,15 @@ async function requestJson(profile: Profile, apiKey: string, path: string, expir
         const nameError = checkServerIdentity(hostname, peer);
         if (!socket.authorized || nameError || (profile.tls && peer.fingerprint256?.replaceAll(':', '').toLowerCase() !== profile.tls.peerFingerprintSha256.toLowerCase())) {
           reject(new Error('TLS identity rejected'));
-        } else resolve();
+        } else {
+          const observed = { leaf: peer.fingerprint256.replaceAll(':', '').toLowerCase(), address: socket.remoteAddress! };
+          if (mutation && (observed.leaf !== mutation.peer.leaf || observed.address !== mutation.peer.address)) {
+            reject(new ToolError('WRITE_DRIFT', 'TLS identity or route changed since preview.'));
+          } else {
+            if (identity) Object.assign(identity, observed);
+            resolve();
+          }
+        }
       });
     });
   } catch (error) {
@@ -78,13 +100,15 @@ async function requestJson(profile: Profile, apiKey: string, path: string, expir
   const agent = new Agent({ maxSockets: 1 });
   agent.createConnection = () => socket;
   try {
+    if (mutation) await mutation.beforeSend();
     return await new Promise<unknown>((resolve, reject) => {
       const call = request(new URL(`/proxy/network/integration${path}`, origin), {
-        method: 'GET', agent,
-        headers: { 'X-API-KEY': apiKey, Accept: 'application/json' },
+        method: mutation?.method ?? 'GET', agent,
+        headers: { 'X-API-KEY': apiKey, Accept: 'application/json',
+          ...(mutation?.body !== undefined ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(mutation.body) } : {}) },
       }, response => {
         const status = response.statusCode ?? 0;
-        if (status !== 200) {
+        if (status !== (mutation?.status ?? 200)) {
           const after = response.headers['retry-after'];
           // Retry only bounded delta-seconds. Never follow redirects with credentials.
           const safeDelay = typeof after === 'string' && /^(0|1|2)$/.test(after) ? Number(after) * 1000 : undefined;
@@ -104,11 +128,12 @@ async function requestJson(profile: Profile, apiKey: string, path: string, expir
         });
         response.once('error', reject);
         response.once('end', () => {
+          if (mutation && mutation.body === undefined && size === 0) { resolve(null); return; }
           try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new ToolError('RESPONSE_INVALID', 'API response is not JSON.')); }
         });
       });
       call.once('error', reject);
-      call.end();
+      call.end(mutation?.body);
     });
   } catch (error) {
     if (error instanceof ToolError) throw error;

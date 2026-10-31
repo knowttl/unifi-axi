@@ -45,13 +45,13 @@ The npm package is scoped; the executable is `unifi-axi`.
 ## Application and sites
 
 Every implemented live command bootstraps from the actual Network `applicationVersion`, separately from any Site Manager label.
-Output identifies the actual application version, selected contract, verification status and unavailable writes.
+Output identifies the actual application version, selected contract, verification status and native write-policy availability.
 Known versions 10.6.109 and 11.0.97 select their matching contract, regardless of a profile override.
 An unknown version returns `UNVERIFIED_API_VERSION` after the info read.
 A profile `apiContract` of 10.6.109 or 11.0.97 permits read-only investigation while output remains visibly `unverified` and retains the actual version.
 Application information is schema-validated only for known application versions; unknown versions require an object with a string `applicationVersion` but skip full info validation.
 Site responses are validated against the selected contract, including during unverified investigation.
-All writes remain unavailable, including profiles with write permissions enabled.
+Unknown application versions cannot enable writes, even with an explicit read-only contract override.
 
 Running `unifi-axi` with a configured profile returns application and Site Manager versions and at most 25 sites, each with its ID, internal reference and name.
 The result includes the vendor total, truncation metadata and commands that retain profile and site context.
@@ -147,6 +147,43 @@ No source conflict is silently normalized.
 Voucher `code` fields and Wi-Fi `passphrase` fields are replaced with `[REDACTED]` in default output.
 Diagnostic `error.code` fields remain visible.
 Voucher lists use the documented default limit of 100; other lists use their documented defaults.
+
+## Network write foundation
+
+`network create --body-file <path>` previews an unmanaged network creation.
+The initial body supports `name`, `management: "UNMANAGED"`, `enabled`, `vlanId` and optional schema-valid `dhcpGuarding`.
+Gateway and switch creation variants remain pending.
+`network delete --network-id <id>` previews deletion of that exact network.
+Omitted `--force` and `--force false` normalize to the same request; `--force true` needs a new preview.
+Both commands select a site through `--site`, the profile or unambiguous discovery.
+
+Execution requires `writes.allowWrites: true` and exact vendor grants in `writes.operations`: `createNetwork` plus `createNetwork:UNMANAGED` for creation, or `deleteNetwork` for deletion.
+Legacy `OP-049`/`OP-050` entries are readable profile syntax but do not authorize execution.
+`UNIFI_AXI_READ_ONLY=true` or `1` overrides all grants.
+Repeat the previewed command with `--execute --confirm <confirmation> --request-id <stable-id>`.
+Confirmation binds the complete normalized method, resolved path, query defaults, body, target set, selected resource state, origin, profile/config identity, credential reference and value hash, application version, contract hash, TLS leaf and connection route.
+Secret values are hashed internally and redacted from output.
+Identity, body input, grants and selected state are reread before dispatch, and changed bindings fail closed.
+The vendor provides no atomic conditional write, so concurrent changes can still occur after that final read.
+
+Linux stores owner-only request claims under `$XDG_STATE_HOME/unifi-axi/writes.log/`, or the runtime home under `.local/state/unifi-axi/writes.log/`.
+`UNIFI_AXI_WRITE_LOG` selects an absolute private journal directory.
+Each configuration/profile namespace owns its request IDs durably.
+The journal contains hashes, audit IDs, resource IDs and outcomes, never request bodies or keys.
+An exclusive claim and synced intent precede dispatch; a synced `unknown` record precedes any possible send.
+Mutations are never retried by transport.
+Reusing an owned ID reports its existing outcome, while changing its request or identity fails.
+Empty, truncated or corrupt claims fail closed and never expire into retry permission.
+
+`write show --request-id <id>` reports the stored intent for the selected identity.
+`write reconcile --request-id <id>` uses documented reads and records a separate observation without replacing ownership.
+A verified acknowledgement plus its exact returned ID can establish the created resource through a subsequent read.
+A lost acknowledgement stays `unknown`; finding a similar network cannot prove that creation succeeded.
+An independently read absent deletion target returns `no-op` without sending a mutation.
+Receipts distinguish `not-sent`, `unknown`, `accepted`, `verified` and `no-op`, with an audit ID for recovery.
+Keep the same profile/configuration and journal location across invocations.
+Native Windows writes remain gated until directory durability is proven.
+The Artium read fixture has no cross-invocation write custody, so hosted mutations remain denied before vendor access.
 
 ## Credentials and transport
 
@@ -273,7 +310,10 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10 selectors (for example, `--task B2.10`) and the default implemented suite are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10 and B3.1 through B3.3 selectors, plus the default implemented suite, are supported now.
+The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
+B3 processes run under an outbound network deny allowing only their synthetic vendor listener.
+Hosted journeys remain opt-in and emit an explicit skip reason when no frozen fixture is configured.
 The B2.2-B2.9 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants, policy ordering, ACL/DNS/traffic variants, voucher and Wi-Fi redaction, switching structures and the documented contract gates.
 The B2.10 selector also covers bounded home output, redacted full text and directory-scoped integration preview, confirmation, installation and repeat setup.
 The B2.0 journey adds installed-executable paging, retry, redirect, body-budget and deadline checks plus direct transport concurrency checks against the same synthetic TLS service.

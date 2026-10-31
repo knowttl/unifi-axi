@@ -31,6 +31,17 @@ With a configured profile, the home view reads application information and a bou
 `doctor` resolves protected credentials, verifies TLS and reads application information only.
 Session setup belongs to a later task.
 
+## Install
+
+Use Node 24.11.0 or newer.
+
+```sh
+npm install -g @knowttl/unifi-axi
+unifi-axi --version
+```
+
+The npm package is scoped; the executable is `unifi-axi`.
+
 ## Application and sites
 
 Every implemented live command bootstraps from the actual Network `applicationVersion`, separately from any Site Manager label.
@@ -209,7 +220,9 @@ Use Node 24.14.0 and pnpm 10.34.6, pinned in this checkout.
 The package engine floor is Node 24.11.0, matching the approved integration baseline.
 TypeScript 5.9.3 and TOON 2.3.1 follow the inspected foundation precedent.
 ESLint 9.39.1, typescript-eslint 8.46.3 and Node types 24.10.0 are exact build pins; pnpm-lock.yaml fixes the transitive graph.
-There are no install hooks, hosted CI, telemetry or vendor connections.
+There are no install hooks, telemetry or vendor connections.
+The release workflow uses pnpm to install dependencies and run `pnpm check` before publishing a tagged release through npm OIDC trusted publishing.
+Configure the npm trusted publisher for `knowttl/unifi-axi` and `.github/workflows/release-please.yml` before releasing.
 
 ```text
 pnpm install --frozen-lockfile
@@ -224,7 +237,8 @@ pnpm verify:contracts -- --task B2.1
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
 The opt-in B1.3 Artium proof runs separately with `pnpm verify:artium`.
 The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
-The packaged selector builds and packs the distribution, installs it offline into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
+The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
+Dependency installation may use the npm registry and does not require a pre-seeded pnpm store.
 It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.
 Offline discovery and credential commands run with a fail-closed network attempt recorder; transport checks use a local fake HTTPS controller.
 Domain code, command parsing and execution stay real.

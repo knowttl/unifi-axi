@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "description": "Protected credentials and verified transport for the UniFi Network Integration API",
   "type": "module",
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "git+https://github.com/knowttl/unifi-axi.git" },
   "bin": { "unifi-axi": "dist/bin.js" },
   "exports": {
     "./catalogue": "./dist/catalogue.js",

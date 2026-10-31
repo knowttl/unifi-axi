@@ -6,5 +6,5 @@ if (args.length === 1 && ['-v', '-V', '--version'].includes(args[0]!)) {
   console.log(version);
 } else {
   const { main } = await import('./cli.js');
-  process.exitCode = main(args);
+  process.exitCode = await main(args);
 }

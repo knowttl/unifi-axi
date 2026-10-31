@@ -2,12 +2,16 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { encode } from '@toon-format/toon';
 import { catalogue, parameterFlag, type Operation, type Parameter } from './catalogue.js';
+import { Profiles, configPath } from './profiles.js';
+import { Redactor, ToolError } from './security.js';
+import { readInformation } from './transport.js';
 
 const description = 'Discover UniFi Network Integration API commands.';
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
-  { command: 'auth status', summary: 'Report unconfigured status without resolving credentials', status: 'implemented-unconfigured-only' },
-  ...['profile list', 'profile configure', 'config path', 'doctor', 'setup', 'write show', 'write reconcile']
+  ...['auth status', 'profile list', 'profile configure', 'config path']
+    .map(command => ({ command, summary: 'Manage protected credential references offline', status: 'implemented' })),
+  ...['doctor', 'setup', 'write show', 'write reconcile']
     .map(command => ({ command, summary: 'Planned capability', status: 'not-implemented' })),
 ];
 
@@ -46,7 +50,7 @@ function usage(code: string, message: string, flags: Flag[]): number {
   return output({ error: { code, message }, help: [`Valid flags: ${flags.map(flag => `--${flag.name}`).join(', ')}`] }, 2);
 }
 
-export function main(args: string[]): number {
+export async function main(args: string[]): Promise<number> {
   const firstFlag = args.findIndex(arg => arg.startsWith('-'));
   const words = firstFlag < 0 ? args : args.slice(0, firstFlag);
   const command = words.join(' ');
@@ -54,7 +58,12 @@ export function main(args: string[]): number {
   const extra = auxiliary.find(entry => entry.command === command);
   const children = [...catalogue, ...auxiliary].filter(entry => entry.command.startsWith(`${command} `));
   const flags = flagsFor(operation);
+  if (['auth status', 'profile list', 'profile configure', 'config path'].includes(command)) {
+    flags.push({ name: 'config', type: 'string', required: false }, { name: 'profile', type: 'string', required: false });
+  }
+  if (command === 'profile configure') flags.push({ name: 'file', type: 'string', required: true });
   const seen = new Set<string>();
+  const values: Record<string, string> = {};
   const tokens = firstFlag < 0 ? [] : args.slice(firstFlag);
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]!;
@@ -62,7 +71,7 @@ export function main(args: string[]): number {
     const equals = token.indexOf('=');
     const name = token.slice(2, equals < 0 ? undefined : equals);
     const flag = flags.find(flag => flag.name === name);
-    if (!flag) return usage('UNKNOWN_FLAG', `Unknown flag --${name}.`, flags);
+    if (!flag) return usage('UNKNOWN_FLAG', 'Unknown flag. Use only the documented flags.', flags);
     if (seen.has(name)) return usage('DUPLICATE_FLAG', `Flag --${name} may appear only once.`, flags);
     seen.add(name);
     if (flag.type === 'switch') {
@@ -71,6 +80,7 @@ export function main(args: string[]): number {
     }
     const value = equals >= 0 ? token.slice(equals + 1) : tokens[++index];
     if (!value || value.startsWith('--')) return usage('INVALID_ARGUMENT', `Flag --${name} requires a value.`, flags);
+    values[name] = value;
     if (flag.type === 'integer' || flag.type === 'number') {
       const number = Number(value);
       if (!Number.isFinite(number) || (flag.type === 'integer' && !Number.isInteger(number)) ||
@@ -94,13 +104,13 @@ export function main(args: string[]): number {
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
-        output: 'No vendor output until implemented. This operation fails before network access.',
+        output: command === 'info' ? 'Bounded JSON information response with redaction; application schema validation pending B1.2a.' : 'No vendor output until implemented. This operation fails before network access.',
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
         })), examples: [`unifi-axi ${command} --help`, example] });
     }
     return output({ command: command || 'unifi-axi', description,
-      flags: ['--help (offline; no default arguments)'],
+      flags: flags.map(flag => `--${flag.name}${flag.type === 'switch' ? '' : ' <value>'}`),
       commands: command ? children.map(({ command, status }) => ({ command, status })) :
         [...auxiliary, ...catalogue].map(({ command, status }) => ({ command, status })),
       examples: ['unifi-axi commands', 'unifi-axi info --help', 'unifi-axi auth status'] });
@@ -109,13 +119,35 @@ export function main(args: string[]): number {
     return output({ count: catalogue.length, commands: catalogue.map(({ id, command, effect, status }) => ({ id, command, effect, status })),
       help: ['unifi-axi info --help', 'unifi-axi site list --help'] });
   }
-  if (command === 'auth status') {
-    const supplied = ['CONFIG', 'PROFILE', 'ORIGIN', 'API_KEY', 'SITE_ID', 'API_CONTRACT', 'TLS', 'WRITES']
-      .some(name => process.env[`UNIFI_AXI_${name}`] !== undefined);
-    if (supplied) return output({ error: { code: 'NOT_IMPLEMENTED', message: 'Configured credential status is not implemented in B1.1. No credentials were resolved.' } }, 1);
-    return output({ auth: { status: 'unconfigured', profile: null, source: 'none supplied' },
-      scope: 'B1.1 checks environment presence only; stored profile discovery is not implemented.',
-      help: ['unifi-axi auth status --help', 'unifi-axi commands'] });
+  if (['auth status', 'profile list', 'profile configure', 'config path', 'info'].includes(command)) {
+    const redactor = new Redactor();
+    try {
+      const path = configPath(values.config);
+      const profiles = new Profiles(path);
+      if (command === 'config path') return output({ config: { path } });
+      if (command === 'profile list') return output({ profiles: await profiles.list() });
+      if (command === 'profile configure') {
+        if (!values.profile || !values.file) return usage('INVALID_ARGUMENT', 'profile configure requires --profile and --file.', flags);
+        await profiles.configure(values.profile, values.file);
+        return output({ profile: { name: values.profile, configured: true }, config: { path } });
+      }
+      const selected = await profiles.select(values.profile, command === 'auth status');
+      const secret = await profiles.secret(selected.profile, redactor, command === 'auth status');
+      if (command === 'auth status') {
+        const ref = selected.profile.apiKey;
+        console.log(redactor.text(encode({ auth: { status: 'configured', profile: selected.name, origin: selected.profile.origin,
+          source: selected.source, secretSource: 'env' in ref ? `env:${ref.env}` : `file:${ref.file}` } })));
+        return 0;
+      }
+      console.log(redactor.text(encode({ information: redactor.payload(await readInformation(selected.profile, secret)),
+        validation: 'Transport verified; application schema and version selection pending B1.2a.' } as Parameters<typeof encode>[0])));
+      return 0;
+    } catch (error) {
+      const known = error instanceof ToolError;
+      console.log(redactor.text(encode({ error: { code: known ? error.code : 'CONFIG_INVALID',
+        message: known ? error.message : 'Unable to read or write protected configuration.' } })));
+      return 1;
+    }
   }
   if (command === '') {
     const executable = resolve(process.argv[1]!);

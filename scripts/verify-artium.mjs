@@ -303,7 +303,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
     runnerLimits.timeoutMs = hostTimeoutMs;
     const before = performance.now();
     const toolTimeout = await cli(['unifi-axi', 'site', 'list'], 1);
-    assert.equal(decode(toolTimeout.stdout).error.code, 'TIMEOUT', 'Longer host deadline must preserve a tool timeout');
+    assert.equal(decode(toolTimeout.stdout).error.code, 'READ_INCOMPLETE', 'Longer host deadline must preserve a tool timeout');
     assert.equal(db.prepare("SELECT outcome FROM audit WHERE event='run-terminal' AND user_id='synthetic-user' ORDER BY id DESC LIMIT 1").get().outcome, 'completed');
     assert.throws(() => assert.equal(db.prepare("SELECT outcome FROM audit WHERE event='run-terminal' AND user_id='synthetic-user' ORDER BY id DESC LIMIT 1").get().outcome, 'TIMEOUT'),
       { code: 'ERR_ASSERTION' }, 'The host-timeout assertion must fail when only the tool deadline expires');
@@ -314,7 +314,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   record('HOST-001', { hostTimeoutMs: 1000, toolDeadlineMs: 10000, terminationGraceMs: 2000, negativeControl: 'tool timeout is not host TIMEOUT' });
 
   mode = 'oversize';
-  assert.equal(decode((await cli(['unifi-axi', 'site', 'list'], 1)).stdout).error.code, 'RESPONSE_INVALID');
+  assert.equal(decode((await cli(['unifi-axi', 'site', 'list'], 1)).stdout).error.code, 'READ_INCOMPLETE');
   mode = 'normal';
   sites = Array.from({ length: 100 }, (_, index) => ({ ...first,
     id: `9361553d-e20d-45b8-a516-${String(index).padStart(12, '0')}`, name: `Synthetic ${index} ${'x'.repeat(120)}` }));

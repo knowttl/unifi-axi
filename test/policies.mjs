@@ -139,8 +139,12 @@ export async function verifyPolicies({ cli, seed }) {
     { orderedFirewallPolicyIds: orders[source] });
     // Named protocol source conflicts are reachable even for an empty policy page.
     serve(() => ({ offset: 0, limit: 25, count: 0, totalCount: 0, data: [] }));
+    const firewallConflictIds = version === '10.6.109' ? ['CF-002', 'CF-003', 'CF-004'] : ['CF-008', 'CF-009', 'CF-010'];
+    const firewallConflicts = ['IPv4', 'IPv4 and IPv6', 'IPv6'].map((protocol, index) =>
+      `${firewallConflictIds[index]} #/components/schemas/Firewall policy ${protocol} named protocol/properties/name`);
     for (const [command, flags] of [['firewall policy list', []], ['firewall policy show', ['--firewall-policy-id', id]]]) {
-      assert.equal((await run(command, flags, 1)).error.code, 'CONTRACT_CONFLICT');
+      assert.deepEqual((await run(command, flags, 1)).error, { code: 'CONTRACT_CONFLICT',
+        message: `Response validation for ${version} blocked by ${firewallConflicts.join(', ')}.` });
     }
 
     serve(url => url.pathname.endsWith(`/${id}`) ? voucher :
@@ -153,8 +157,14 @@ export async function verifyPolicies({ cli, seed }) {
     serve(() => ({ offset: 0, limit: 25, count: 1, totalCount: 1, data: [wifi] }));
     assert.deepEqual((await run('wifi broadcast list')).wifiBroadcasts,
       [{ ...wifi, securityConfiguration: { type: 'WPA2_PERSONAL', passphrase: '[REDACTED]' } }]);
-    serve(() => ({ ...wifi, basicDataRateKbpsByFrequencyGHz: { '2.4': 'invalid' } }));
-    assert.equal((await run('wifi broadcast show', ['--wifi-broadcast-id', id], 1)).error.code, 'CONTRACT_CONFLICT');
+    const wifiConflictIds = version === '10.6.109' ? ['CF-005', 'CF-006'] : ['CF-011', 'CF-012'];
+    const wifiConflicts = ['2.4', '5'].map((frequency, index) =>
+      `${wifiConflictIds[index]} #/components/schemas/IntegrationWifiBasicDataRateConfigurationDto/properties/${frequency}`);
+    for (const record of [wifi, { ...wifi, basicDataRateKbpsByFrequencyGHz: { '2.4': 'invalid' } }]) {
+      serve(() => record);
+      assert.deepEqual((await run('wifi broadcast show', ['--wifi-broadcast-id', id], 1)).error, { code: 'CONTRACT_CONFLICT',
+        message: `Response validation for ${version} blocked by ${wifiConflicts.join(', ')}.` });
+    }
     rows.push({ command: 'firewall policy and wifi broadcast show', version, status: 'known-contract-conflict' },
       { command: 'hotspot voucher and wifi broadcast list', version, status: 'passed', direction: 'redacted' });
   }

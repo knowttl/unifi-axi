@@ -197,7 +197,7 @@ export function validateResponse(version: string, operationId: string, value: un
     const poe = contractConflicts(version, 'device').find(row => row.id === 'CF-007' && row.status === 'blocked');
     if (poe && !blocked.includes(poe)) blocked.push(poe);
   }
-  if (blocked.length) throw new ToolError('CONTRACT_CONFLICT', `Response validation blocked by ${blocked.map(row => `${row.id} ${row.pointer}`).join(', ')}.`);
+  if (blocked.length) throw new ToolError('CONTRACT_CONFLICT', `Response validation for ${version} blocked by ${blocked.map(row => `${row.id} ${row.pointer}`).join(', ')}.`);
   const errors = validator.validate(pointer, value);
   if (errors.length) throw new ToolError('RESPONSE_INVALID', `Response does not match the selected version contract: ${errors[0]}`);
 }

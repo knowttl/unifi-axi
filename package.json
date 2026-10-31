@@ -18,7 +18,7 @@
     "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "pnpm verify:packaged -- --task B1.2 && node --test test/private-file.mjs",
+    "test": "pnpm verify:packaged -- --task B1.2a && node --test test/private-file.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm verify:packaged && node --test test/private-file.mjs",
     "verify:packaged": "node scripts/verify-packaged.mjs"
   },

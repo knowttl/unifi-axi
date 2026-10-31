@@ -6,8 +6,9 @@ import { X509Certificate } from 'node:crypto';
 import { createServer } from 'node:https';
 import { once } from 'node:events';
 import { decode } from '@toon-format/toon';
+import { verifyApplication } from './application.mjs';
 
-export async function verifyCredentials({ executable, installed, temporary, env, guard }) {
+export async function verifyCredentials({ executable, installed, temporary, env, guard, journey = false }) {
   const home = join(temporary, 'credentials');
   mkdirSync(home, { mode: 0o700 });
   const config = join(home, 'config.json');
@@ -167,10 +168,11 @@ Set-Acl -LiteralPath $p -AclObject $acl
     openssl(['x509', '-req', '-in', 'signed.csr', '-CA', 'ca.crt', '-CAkey', 'ca.key', '-CAcreateserial', '-out', `${name}.crt`, '-days', days, '-extfile', 'extensions']);
   }
   let requests = [];
+  let respond = () => ({ applicationVersion: '11.0.97', echo: syntheticKey, encoded: encodeURIComponent(syntheticKey), escaped: JSON.stringify(syntheticKey).slice(1, -1), passphrase: 'synthetic-wifi' });
   const server = createServer({ key: readFileSync(join(home, 'valid.key')), cert: cert('valid') }, (request, response) => {
     requests.push({ method: request.method, path: request.url, host: request.headers.host, key: request.headers['x-api-key'] });
     response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify({ data: { applicationVersion: '11.0.97', echo: syntheticKey, encoded: encodeURIComponent(syntheticKey), escaped: JSON.stringify(syntheticKey).slice(1, -1), passphrase: 'synthetic-wifi' } }));
+    response.end(JSON.stringify(respond(request)));
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -181,8 +183,8 @@ Set-Acl -LiteralPath $p -AclObject $acl
     const trusted = { origin, apiKey: { env: 'SYNTHETIC_KEY' }, tls: tls('valid') };
     configure({ tls: trusted });
     const information = await cli(['info'], 0, keys, false);
-    assert.equal(information.information.data.applicationVersion, '11.0.97');
-    assert.equal(information.information.data.passphrase, '[REDACTED]');
+    assert.equal(information.information.applicationVersion, '11.0.97');
+    assert.equal(information.information.passphrase, '[REDACTED]');
     assert.deepEqual(requests, [{ method: 'GET', path: '/proxy/network/integration/v1/info', host: `localhost:${port}`, key: syntheticKey }]);
     requests = [];
     configure({ file: { ...trusted, apiKey: { file: secretFile } } });
@@ -214,15 +216,28 @@ Set-Acl -LiteralPath $p -AclObject $acl
       configure({ invalid: { ...trusted, tls: overrides } });
       assert.equal((await status([], keys, 1)).error.code, 'CONFIG_INVALID');
     }
+    if (journey) {
+      server.setSecureContext({ key: readFileSync(join(home, 'valid.key')), cert: cert('valid') });
+      await verifyApplication({
+        cli: (args, code = 0, overrides = {}) => cli(args, code, { ...keys, ...overrides }, false),
+        configure, trusted, config,
+        seed: handler => { requests = []; respond = handler; },
+        requests: () => requests,
+      });
+    }
   } finally {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
   }
   const schema = JSON.parse(readFileSync(join(installed, 'dist/axi-credential.schema.json'), 'utf8'));
   assert.equal(schema.properties.apiKey['x-secret'], true, 'Packaged host-facing credential schema marks the secret field');
-  return ['CRED-001', 'CRED-002', 'CRED-003', 'CRED-004', 'CRED-005', 'CRED-006', 'CRED-007', 'CRED-010', 'CRED-013', 'STEP-B1.2'].map(acceptance => ({
+  const rows = ['CRED-001', 'CRED-002', 'CRED-003', 'CRED-004', 'CRED-005', 'CRED-006', 'CRED-007', 'CRED-010', 'CRED-013', 'STEP-B1.2'].map(acceptance => ({
     task: 'B1.2', acceptance, operation: null, version: null, variant: null, direction: 'standalone-synthetic',
     status: ['CRED-013', 'STEP-B1.2'].includes(acceptance) && process.platform !== 'win32' ? 'pending-native-windows' : 'passed-on-current-platform',
     nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING',
   }));
+  if (journey) rows.push({ task: 'B1.2a', acceptance: 'STEP-B1.2a', operation: ['OP-001', 'OP-002'],
+    version: ['10.6.109', '11.0.97'], variant: null, direction: 'standalone-synthetic',
+    status: 'passed-on-current-platform', nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING' });
+  return rows;
 }

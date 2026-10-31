@@ -23,7 +23,7 @@ unifi-axi --version
 ```
 
 Output is TOON on stdout except for the bare version; errors use structured codes.
-`info` and `client list` accept the published `--full` compatibility switch; output is the same as without it.
+`info` and `client list` retain the published `--full` switch; see [Application and sites](#application-and-sites) for text bounds.
 Unknown commands, unknown flags, duplicate flags and invalid scalar values exit 2.
 Bare `-v`, `-V` and `--version` print the package version before loading the catalogue.
 Without a profile the home view exits 1 with `PROFILE_REQUIRED` and setup guidance.

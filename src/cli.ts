@@ -31,7 +31,6 @@ function flagsFor(operation?: Operation): Flag[] {
   const flags: Flag[] = [{ name: 'help', type: 'switch', required: false }];
   if (!operation) return flags;
   flags.push({ name: 'profile', type: 'string', required: false }, { name: 'config', type: 'string', required: false });
-  if (['OP-001', 'OP-014'].includes(operation.id)) flags.push({ name: 'full', type: 'switch', required: false });
   for (const parameter of operation.contracts[0]!.parameters) {
     flags.push({ name: parameterFlag(parameter.name), type: parameter.schema.type ?? 'string',
       required: parameter.required ?? false, default: parameter.schema.default, schema: parameter.schema });

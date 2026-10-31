@@ -36,13 +36,15 @@ function sitePage(page: SitePage): SitePage {
   return page;
 }
 
-export async function sites(profile: Profile, secret: string, values: Record<string, string>, version: string, bounded = false) {
+export async function sites(profile: Profile, secret: string, values: Record<string, string>, version: string, boundedOrPeer: boolean | PeerIdentity = false) {
+  const bounded = boundedOrPeer === true;
+  const peer = typeof boundedOrPeer === 'object' ? boundedOrPeer : undefined;
   const offset = Number(values.offset ?? 0);
   const limit = Number(values.limit ?? 25);
   const read = async (next: number, budget?: Parameters<typeof readJson>[3]) => {
     const query = new URLSearchParams({ offset: String(next), limit: String(bounded ? Math.min(limit, 25 - next) : limit) });
     if (values.filter !== undefined) query.set('filter', values.filter);
-    const value = await readJson(profile, secret, `/v1/sites?${query}`, budget);
+    const value = await readJson(profile, secret, `/v1/sites?${query}`, budget, peer);
     validateResponse(version, 'OP-002', value);
     return sitePage(value as SitePage);
   };

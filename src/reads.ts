@@ -1,7 +1,7 @@
 import { parameterFlag, type Operation } from './catalogue.js';
 import type { Profile } from './profiles.js';
 import { enumerate, type Page } from './paging.js';
-import { readJson } from './transport.js';
+import { readJson, type PeerIdentity } from './transport.js';
 import { validateResponse } from './validation.js';
 import { ToolError } from './security.js';
 
@@ -21,7 +21,7 @@ const names: Record<string, string> = {
 };
 
 export async function readOperation(profile: Profile, secret: string, operation: Operation,
-  values: Record<string, string>, version: string) {
+  values: Record<string, string>, version: string, peer?: PeerIdentity) {
   let path = operation.path;
   const parameters = operation.contracts.find(contract => contract.version === version)!.parameters;
   for (const parameter of parameters.filter(parameter => parameter.in === 'path')) {
@@ -31,7 +31,7 @@ export async function readOperation(profile: Profile, secret: string, operation:
     path = path.replace(`{${parameter.name}}`, encodeURIComponent(value));
   }
   const read = async (url: string, budget?: Parameters<typeof readJson>[3]) => {
-    const result = await readJson(profile, secret, url, budget);
+    const result = await readJson(profile, secret, url, budget, peer);
     validateResponse(version, operation.id, result);
     // Voucher codes are credentials; diagnostic error.code fields stay visible.
     if (operation.id === 'OP-047') (result as RecordData).code = '[REDACTED]';
@@ -48,15 +48,16 @@ export async function readOperation(profile: Profile, secret: string, operation:
     const result = await read(`${path}${query.size ? `?${query}` : ''}`);
     const targetParameter = parameters.find(parameter => parameter.in === 'path' && parameter.name !== 'siteId');
     const target = targetParameter ? values[parameterFlag(targetParameter.name)] : undefined;
-    if (target !== undefined && Object.hasOwn(result, 'id') && result.id !== target) {
+    if (target !== undefined && Object.hasOwn(result, 'id') &&
+        (typeof result.id !== 'string' || result.id.toLowerCase() !== target.toLowerCase())) {
       throw new ToolError('RESPONSE_INVALID', '/id: response does not match the requested resource.');
     }
     if (operation.id === 'OP-053') {
       const networkPath = path.slice(0, -'/references'.length);
-      const network = await readJson(profile, secret, networkPath);
+      const network = await readJson(profile, secret, networkPath, undefined, peer);
       validateResponse(version, 'OP-051', network);
       const selected = network as RecordData;
-      if (selected.id !== target) throw new ToolError('RESPONSE_INVALID', '/id: response does not match the requested network.');
+      if (typeof selected.id !== 'string' || selected.id.toLowerCase() !== target?.toLowerCase()) throw new ToolError('RESPONSE_INVALID', '/id: response does not match the requested network.');
       return { network: { id: selected.id, name: selected.name }, [name]: result };
     }
     return { [name]: result };

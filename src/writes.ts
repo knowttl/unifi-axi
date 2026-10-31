@@ -44,7 +44,7 @@ interface Candidate {
 
 async function candidate(ctx: Context, operation: Operation, values: Record<string, string>): Promise<Candidate> {
   const version = ctx.api.contract!;
-  const site = values.site ?? ctx.selected.profile.siteId ?? selectSite((await sites(ctx.selected.profile, ctx.secret, {}, version)).sites);
+  const site = values.site ?? ctx.selected.profile.siteId ?? selectSite((await sites(ctx.selected.profile, ctx.secret, {}, version, ctx.peer)).sites);
   const inputs: Record<string, string> = { ...values, site };
   const validator = contractValidator(version);
   const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}`;
@@ -52,9 +52,11 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   const query = new URLSearchParams();
   for (const [index, parameter] of operation.contracts.find(contract => contract.version === version)!.parameters.entries()) {
     const raw = inputs[parameterFlag(parameter.name)];
-    const value = raw === undefined ? parameter.schema.default : parameter.schema.type === 'boolean' ? raw === 'true' : raw;
+    let value = raw === undefined ? parameter.schema.default : parameter.schema.type === 'boolean' ? raw === 'true' : raw;
     if (value === undefined && !parameter.required) continue;
     if (validator.validate(`${pointer}/parameters/${index}/schema`, value).length) throw new ToolError('INVALID_ARGUMENT', `Invalid --${parameterFlag(parameter.name)}.`);
+    if (typeof value === 'string' && parameter.schema.format === 'uuid') value = value.toLowerCase();
+    inputs[parameterFlag(parameter.name)] = String(value);
     if (parameter.in === 'path') path = path.replace(`{${parameter.name}}`, encodeURIComponent(String(value)));
     else query.set(parameter.name, String(value));
   }
@@ -77,20 +79,20 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   }
   query.sort();
   if (query.size) path += `?${query}`;
-  const target = values['network-id'] ?? null;
-  const binding = digest({ identity: ctx.identity, method: operation.method, path: `/proxy/network/integration${path}`, site,
+  const target = inputs['network-id'] ?? null;
+  const binding = digest({ identity: ctx.identity, method: operation.method, path: `/proxy/network/integration${path}`, site: inputs.site!,
     targets: target ? [target] : [], body, protectedOutput: null, grants });
-  return { operation, path, site, target, body, grants, binding };
+  return { operation, path, site: inputs.site!, target, body, grants, binding };
 }
 
 async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' | 'site' | 'target' | 'body'>): Promise<unknown> {
   const version = ctx.api.contract!;
-  const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-048')!, { site: request.site }, version);
+  const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-048')!, { site: request.site }, version, ctx.peer);
   const networks = (listing as Record<string, unknown>).networks as Record<string, unknown>[];
   if (request.operation.id === 'OP-049') return networks.filter(row => row.vlanId === request.body!.vlanId).map(row => ({ id: row.id, vlanId: row.vlanId }));
-  if (!networks.some(row => row.id === request.target)) return null;
+  if (!networks.some(row => (row.id as string).toLowerCase() === request.target)) return null;
   return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-051')!,
-    { site: request.site, 'network-id': request.target! }, version)).network;
+    { site: request.site, 'network-id': request.target! }, version, ctx.peer)).network;
 }
 
 function receipt(record: Intent, requestId: string) {
@@ -159,7 +161,7 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
       if (contractValidator(ctx.api.contract!).validate(pointer, response).length) throw new ToolError('RESPONSE_INVALID', 'Invalid mutation acknowledgement.');
       const target = (response as Record<string, unknown>).id;
       if (typeof target !== 'string' || !uuid.test(target)) throw new ToolError('RESPONSE_INVALID', 'Invalid created network ID.');
-      record.target = target;
+      record.target = target.toLowerCase();
     }
     record.outcome = 'accepted';
     await journal!.save(record);
@@ -183,7 +185,7 @@ export async function inspectWrite(profiles: Profiles, explicit: string | undefi
   if (!reconcile) return receipt(record, requestId);
   // An ambiguous create has no trustworthy vendor ID. Similar objects prove nothing.
   const outcome = await verify(ctx, record);
-  if (!record.target) await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-048')!, { site: record.site }, ctx.api.contract!);
+  if (!record.target) await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-048')!, { site: record.site }, ctx.api.contract!, ctx.peer);
   await journal.observe(outcome);
   return { ...receipt(record, requestId), reconciliation: { outcome, readOnly: true } };
 }

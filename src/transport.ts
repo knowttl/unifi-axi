@@ -78,10 +78,11 @@ async function requestJson(profile: Profile, apiKey: string, path: string, expir
           reject(new Error('TLS identity rejected'));
         } else {
           const observed = { leaf: peer.fingerprint256.replaceAll(':', '').toLowerCase(), address: socket.remoteAddress! };
-          if (mutation && (observed.leaf !== mutation.peer.leaf || observed.address !== mutation.peer.address)) {
+          const expected = mutation?.peer ?? identity;
+          if (expected && (mutation || expected.leaf) && (observed.leaf !== expected.leaf || observed.address !== expected.address)) {
             reject(new ToolError('WRITE_DRIFT', 'TLS identity or route changed since preview.'));
           } else {
-            if (identity) Object.assign(identity, observed);
+            if (identity && !identity.leaf) Object.assign(identity, observed);
             resolve();
           }
         }

@@ -58,12 +58,15 @@ export async function verifyWrites(h: Harness) {
       assert.equal(request.headers['x-api-key'], h.syntheticKey);
       const url = new URL(request.url!, h.trusted.origin);
       if (url.pathname.endsWith('/info')) return { applicationVersion: version };
+      if (url.pathname === '/proxy/network/integration/v1/sites') return {
+        offset: 0, limit: 25, count: 1, totalCount: 1, data: [{ id: site, internalReference: 'default', name: 'Synthetic site' }],
+      };
       const base = `/proxy/network/integration/v1/sites/${site}/networks`;
       if (request.method === 'GET') {
         reads++;
         if (reads === driftOnRead) h.configure({ lab: { ...profile, apiKey: { env: 'REPLACED_KEY' } } });
         if (url.pathname === base) return { offset: 0, limit: 25, count: state.length, totalCount: state.length, data: state };
-        const found = state.find(row => url.pathname === `${base}/${row.id}`);
+        const found = state.find(row => url.pathname === `${base}/${String(row.id).toLowerCase()}`);
         assert.ok(found, `Unexpected read: ${request.url}`);
         if (reads === changeTargetOnRead) state = state.map(row => row.id === id ? { ...row, name: 'Changed after selected-state read' } : row);
         return found;
@@ -75,11 +78,11 @@ export async function verifyWrites(h: Harness) {
       request.on('end', () => {
         sent.push({ method: request.method!, path: request.url!, body: bytes ? JSON.parse(bytes) as unknown : null });
         if (request.method === 'POST') { assert.deepEqual(JSON.parse(bytes), body); state.push(target); }
-        else { assert.equal(url.searchParams.get('force'), 'false'); state = state.filter(row => row.id !== id); }
+        else { assert.equal(url.searchParams.get('force'), 'false'); state = state.filter(row => String(row.id).toLowerCase() !== id); }
         if (mode === 'lost-ack') { request.socket.destroy(); return; }
         if (mode === 'stall') { response.writeHead(201); response.write('{'); return; }
         response.statusCode = request.method === 'POST' ? 201 : 200;
-        response.end(request.method === 'POST' ? JSON.stringify({ ...target, echo: h.syntheticKey }) : '');
+        response.end(request.method === 'POST' ? JSON.stringify({ ...target, id: id.toUpperCase(), echo: h.syntheticKey }) : '');
       });
       return undefined;
     });
@@ -138,11 +141,46 @@ export async function verifyWrites(h: Harness) {
     assert.deepEqual((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation, { outcome: 'verified', readOnly: true });
     assert.equal(mutations, before);
     const deleteConfirmation = (await run(remove)).preview.confirmation;
-    assert.equal((await run(execute(remove, deleteConfirmation, `delete-${version}`))).write.outcome, 'verified');
+    const uppercaseRemove = ['network', 'delete', '--site', site.toUpperCase(), '--network-id', id.toUpperCase()];
+    assert.equal((await run(uppercaseRemove)).preview.confirmation, deleteConfirmation);
+    assert.equal((await run(execute(uppercaseRemove, deleteConfirmation, `delete-${version}`))).write.outcome, 'verified');
     assert.deepEqual(state, [neighbour]);
     const absent = (await run(remove)).preview.confirmation;
     assert.equal((await run(execute(remove, absent, `absent-${version}`))).write.outcome, 'no-op');
     assert.equal(mutations, before + 1);
+    reset();
+    state = [neighbour, { ...target, id: id.toUpperCase() }];
+    const uppercaseState = (await run(remove)).preview.confirmation;
+    assert.equal((await run(execute(remove, uppercaseState, `uppercase-state-${version}`))).write.outcome, 'verified');
+    assert.deepEqual(state, [neighbour]);
+    for (const connection of [2, 3, 5, 6, 7]) {
+      reset();
+      state = [neighbour, target];
+      const confirmation = (await run(remove)).preview.confirmation;
+      assert.equal((await run(execute(remove, confirmation, `peer-${connection}-${version}`), 1,
+        { UNIFI_AXI_TEST_PEER_DRIFT: String(connection) })).error.code, 'WRITE_DRIFT');
+      assert.equal(mutations, 0);
+    }
+    reset();
+    const discoverProfile = { ...profile };
+    delete discoverProfile.siteId;
+    h.configure({ lab: discoverProfile });
+    assert.equal((await run(create, 1, { UNIFI_AXI_TEST_PEER_DRIFT: '2' })).error.code, 'WRITE_DRIFT');
+    assert.equal(mutations, 0);
+    reset();
+    const durable = (await run(create)).preview.confirmation;
+    assert.equal((await run(execute(create, durable, `ancestor-${version}`), 1,
+      { UNIFI_AXI_TEST_FAULT: 'ancestor-sync' })).error.code, 'WRITE_FAILED');
+    assert.equal(mutations, 0);
+    reset();
+    state = [neighbour, target];
+    const recovery = (await run(remove)).preview.confirmation;
+    assert.equal((await run(execute(remove, recovery, `recovery-peer-${version}`), 0,
+      { UNIFI_AXI_TEST_PEER_DRIFT: '8' })).write.outcome, 'accepted');
+    assert.equal(mutations, 1);
+    assert.equal((await run(['write', 'reconcile', '--request-id', `recovery-peer-${version}`], 1,
+      { UNIFI_AXI_TEST_PEER_DRIFT: '2' })).error.code, 'WRITE_DRIFT');
+    assert.equal(mutations, 1);
     reset();
     state = [neighbour, target];
     const beforeDrift = (await run(remove)).preview.confirmation;

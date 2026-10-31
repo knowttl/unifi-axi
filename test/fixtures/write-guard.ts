@@ -2,9 +2,10 @@ import { Socket } from 'node:net';
 import dgram from 'node:dgram';
 import fs from 'node:fs/promises';
 import { constants, appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { syncBuiltinESMExports } from 'node:module';
 import https from 'node:https';
+import tls from 'node:tls';
 
 const connect = Socket.prototype.connect;
 Socket.prototype.connect = function (this: Socket, ...args: unknown[]) {
@@ -23,6 +24,16 @@ dgram.Socket.prototype.send = function () {
 
 // Faults live in the test preload, never in product flags or environment handling.
 const fault = process.env.UNIFI_AXI_TEST_FAULT;
+const tlsConnect = tls.connect;
+let connections = 0;
+tls.connect = ((...args: Parameters<typeof tlsConnect>) => {
+  const socket = Reflect.apply(tlsConnect, tls, args) as ReturnType<typeof tlsConnect>;
+  connections++;
+  if (connections === Number(process.env.UNIFI_AXI_TEST_PEER_DRIFT)) {
+    socket.prependOnceListener('secureConnect', () => Object.defineProperty(socket, 'remoteAddress', { value: '127.0.0.2' }));
+  }
+  return socket;
+}) as typeof tlsConnect;
 const mkdir = fs.mkdir;
 fs.mkdir = (async (...args: Parameters<typeof mkdir>) => {
   const exclusiveClaim = /\/[a-f0-9]{64}\/[a-f0-9]{64}$/.test(String(args[0])) &&
@@ -38,6 +49,7 @@ fs.open = async (...args: Parameters<typeof open>) => {
   if (typeof args[1] === 'number' && (args[1] & constants.O_DIRECTORY) !== 0) {
     const sync = handle.sync.bind(handle);
     handle.sync = async () => {
+      if (fault === 'ancestor-sync' && String(args[0]) === dirname(process.env.UNIFI_AXI_WRITE_LOG!)) throw new Error('Synthetic ancestor sync failure');
       await sync();
       let text: string;
       try { text = await fs.readFile(join(String(args[0]), 'intent.json'), 'utf8'); }

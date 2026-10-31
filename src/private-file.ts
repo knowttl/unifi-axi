@@ -60,15 +60,12 @@ export class PrivateFiles {
   }
 
   async directory(path: string, exclusive = false): Promise<void> {
-    const created = await mkdir(path, { recursive: !exclusive, mode: 0o700 });
+    await mkdir(path, { recursive: !exclusive, mode: 0o700 });
     await this.verifyDirectory(path);
     if (this.platform === 'win32') this.acl(path, 'restrict', true);
-    if (created || exclusive) {
-      const stop = dirname(created ?? path);
-      for (let current = path; ; current = dirname(current)) {
-        await this.syncDirectory(current);
-        if (current === stop) break;
-      }
+    for (let current = path; ; current = dirname(current)) {
+      await this.syncDirectory(current);
+      if (current === dirname(current)) break;
     }
   }
 

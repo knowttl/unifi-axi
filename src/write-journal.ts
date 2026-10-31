@@ -69,6 +69,8 @@ export class WriteJournal {
         !['not-sent', 'unknown', 'accepted', 'verified', 'no-op'].includes(value.outcome) ||
         !Array.isArray(value.bodyKeys) || value.bodyKeys.some(key => typeof key !== 'string' || !['name', 'enabled', 'management', 'vlanId', 'dhcpGuarding'].includes(key)) ||
         Object.keys(value).sort().join() !== 'auditId,binding,bodyHash,bodyKeys,confirmation,identity,operation,outcome,site,target,version') return corrupt();
+    value.site = value.site.toLowerCase();
+    value.target = value.target?.toLowerCase() ?? null;
     return value;
   }
 
@@ -82,7 +84,6 @@ export class WriteJournal {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ToolError('WRITE_OWNED', 'This request ID is already owned. Use write show or write reconcile.');
       throw error;
     }
-    await this.files.syncDirectory(namespace);
     const record: Intent = { version: 1, auditId: randomUUID(), outcome: 'not-sent', ...intent };
     await this.save(record);
     return record;

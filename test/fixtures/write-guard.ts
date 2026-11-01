@@ -46,6 +46,9 @@ fs.mkdir = (async (...args: Parameters<typeof mkdir>) => {
 const open = fs.open;
 fs.open = async (...args: Parameters<typeof open>) => {
   const handle = await open(...args);
+  if (String(args[0]) === process.env.UNIFI_AXI_TEST_SECRET_DESTINATION && fault === 'secret-disk') {
+    handle.writeFile = async () => { throw new Error('Synthetic output disk failure'); };
+  }
   if (typeof args[1] === 'number' && (args[1] & constants.O_DIRECTORY) !== 0) {
     const sync = handle.sync.bind(handle);
     handle.sync = async () => {

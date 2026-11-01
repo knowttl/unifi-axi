@@ -235,6 +235,30 @@ All grants also require `writes.allowWrites: true` and remain subject to the rea
 Ordering receipts verify the final sequence through the documented ordering read.
 Ordering bodies must retain exactly the selected IDs without duplicates.
 
+## Wi-Fi broadcasts and vouchers
+
+`wifi broadcast` supports `create`, `update` and `delete` with grants `createWifiBroadcast`, `updateWifiBroadcast` and `deleteWifiBroadcast`.
+`hotspot voucher` supports `create`, `delete` and `delete-many` with grants `createVouchers`, `deleteVoucher` and `deleteVouchers`.
+All use the shared preview, confirmation, write policy and durable request ID controls.
+Creates and Wi-Fi replacements accept a protected `--body-file` matching the selected contract.
+Wi-Fi replacements verify optional settings as well as submitted fields.
+Unresolved basic-rate schema values are refused.
+Voucher generation defaults to one voucher when `count` is omitted; receipts retain the complete returned batch of IDs.
+Bulk deletion requires `--filter`, previews the matching IDs, refuses detected drift, and combines the predicate with exactly the approved sorted ID set.
+A matching voucher created after the final read is outside that set and survives.
+The outgoing predicate uses the vendor's `and(originalPredicate,id.in(...))` [compound filter syntax](https://developer.ui.com/network/v10.6.106/filtering).
+An empty set sends no DELETE.
+Deletion filter text is withheld from receipts and journals because it may contain a voucher code.
+
+Creation and Wi-Fi replacement can also accept `--secret-output <absolute-file>` when the selected profile sets `allowSecretExport: true`.
+Both gates are required; exports remain unavailable in hosted execution.
+The destination must be a new file in an existing private directory and is reserved before any mutation.
+Only allowlisted codes or passphrases reach that protected file; ordinary output stays redacted.
+A delivery failure preserves the vendor outcome and reports `delivery.delivered: false` separately.
+Repeat the exact owned request with its original confirmation, request ID and output path to recover the complete batch through reads without generating again.
+Alternatively, use `write reconcile --request-id <id>` to inspect ownership, then export each stored ID through `hotspot voucher show --voucher-id <id> --secret-output <new-file>` or `wifi broadcast show --wifi-broadcast-id <id> --secret-output <new-file>`.
+Never issue a new generation request to recover an existing code.
+
 ## Credentials and transport
 
 Use `config path` to find configuration and `profile list` to list its profiles.
@@ -343,6 +367,8 @@ pnpm verify:packaged -- --task B1.1
 pnpm verify:packaged -- --task B1.2
 pnpm verify:packaged -- --task B1.2a
 pnpm verify:packaged -- --task B2.0
+pnpm verify:packaged -- --task B4.7
+pnpm verify:packaged -- --task B4.8
 pnpm verify:contracts -- --task B2.1
 ```
 
@@ -360,10 +386,11 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0 through B4.4 selectors, plus the default implemented suite, are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3, B4.0 through B4.4, B4.7 and B4.8 selectors, plus the default implemented suite, are supported now.
 The B4.0 and B4.1 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
 The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
 The B4.2, B4.3 and B4.4 selectors exercise policy, zone and ACL writes and ordering against independent fake state under outbound network denial.
+The B4.7 and B4.8 selectors exercise Wi-Fi variants and nested enums, voucher batches, protected delivery failures, read-only code recovery and bulk deletion with a late-arriving unapproved match.
 B3 processes run under an outbound network deny allowing only their synthetic vendor listener.
 Hosted journeys remain opt-in and emit an explicit skip reason when no frozen fixture is configured.
 The B2.2-B2.9 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants, policy ordering, ACL/DNS/traffic variants, voucher and Wi-Fi redaction, switching structures and the documented contract gates.

@@ -9,6 +9,8 @@ import { contractValidator } from './validation.js';
 import { sendMutation, type PeerIdentity } from './transport.js';
 import { digest, WriteJournal, type Intent } from './write-journal.js';
 import { PrivateFiles } from './private-file.js';
+import { isAbsolute } from 'node:path';
+import { responseSecrets } from './secret-output.js';
 
 const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -19,6 +21,8 @@ const families = [
   { writes: ['OP-008', 'OP-011', 'OP-013'], list: 'OP-007', show: 'OP-012', rows: 'aclRules', row: 'aclRule', target: 'acl-rule-id' },
   { writes: ['OP-031', 'OP-034', 'OP-036', 'OP-037'], list: 'OP-030', show: 'OP-035', rows: 'firewallPolicies', row: 'firewallPolicy', target: 'firewall-policy-id' },
   { writes: ['OP-039', 'OP-040', 'OP-042'], list: 'OP-038', show: 'OP-041', rows: 'firewallZones', row: 'firewallZone', target: 'firewall-zone-id' },
+  { writes: ['OP-043', 'OP-045', 'OP-046'], list: 'OP-044', show: 'OP-047', rows: 'vouchers', row: 'voucher', target: 'voucher-id' },
+  { writes: ['OP-070', 'OP-071', 'OP-073'], list: 'OP-069', show: 'OP-072', rows: 'wifiBroadcasts', row: 'wifiBroadcast', target: 'wifi-broadcast-id' },
 ];
 const ordering: Record<string, { read: string; row: string }> = {
   'OP-010': { read: 'OP-009', row: 'aclRuleOrder' }, 'OP-033': { read: 'OP-032', row: 'firewallPolicyOrder' },
@@ -74,6 +78,21 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   const version = ctx.api.contract!;
   const site = values.site ?? ctx.selected.profile.siteId ?? selectSite((await sites(ctx.selected.profile, ctx.secret, {}, version, ctx.peer)).sites);
   const inputs: Record<string, string> = { ...values, site };
+  if (operation.id === 'OP-043') {
+    // Preserve the predicate as one expression when adding the approved ID restriction.
+    let depth = 0;
+    let quote = '';
+    for (const character of values.filter ?? '') {
+      if (quote) {
+        if (character === quote) quote = '';
+      } else if (character === "'") quote = character;
+      else if (character === '(') depth++;
+      else if (character === ')') {
+        if (--depth < 0) throw new ToolError('INVALID_ARGUMENT', 'Unbalanced deletion filter.');
+      } else if (!/[A-Za-z0-9_.:,+ \t-]/.test(character)) throw new ToolError('INVALID_ARGUMENT', 'Invalid deletion filter token.');
+    }
+    if (depth || quote || !values.filter?.trim()) throw new ToolError('INVALID_ARGUMENT', 'Unbalanced or empty deletion filter.');
+  }
   const validator = contractValidator(version);
   const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}`;
   let path = operation.path;
@@ -106,11 +125,12 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   if (query.size) path += `?${query}`;
   const family = families.find(family => family.writes.includes(operation.id));
   const target = family ? inputs[family.target] ?? null : null;
-  const selectors = Object.fromEntries(['source-firewall-zone-id', 'destination-firewall-zone-id']
+  const selectors = Object.fromEntries(['source-firewall-zone-id', 'destination-firewall-zone-id', ...(operation.id === 'OP-043' ? ['filter'] : [])]
     .filter(key => inputs[key] !== undefined).map(key => [key, inputs[key]!]));
   const targets = target ? [target] : ordering[operation.id] ? orderedIds(body!) : [];
   const binding = digest({ identity: ctx.identity, method: operation.method, path: `/proxy/network/integration${path}`, site: inputs.site!,
-    targets, body, protectedOutput: null, grants });
+    targets, body: operation.id === 'OP-045' ? { ...body, count: body!.count ?? 1 } : body,
+    protectedOutput: values['secret-output'] ?? null, grants });
   return { operation, path, site: inputs.site!, target, body, grants, binding, selectors, targets };
 }
 
@@ -120,13 +140,15 @@ async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' 
   if (order) return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === order.read)!,
     { site: request.site, ...request.selectors }, version, ctx.peer) as Record<string, unknown>)[order.row];
   const family = families.find(family => family.writes.includes(request.operation.id))!;
-  const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!, { site: request.site }, version, ctx.peer);
+  const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!,
+    { site: request.site, ...request.selectors }, version, ctx.peer, true);
   const rows = (listing as Record<string, unknown>)[family.rows] as Record<string, unknown>[];
+  if (request.operation.id === 'OP-043') return rows.toSorted((a, b) => String(a.id).localeCompare(String(b.id)));
   if (request.operation.id === 'OP-049') return rows.filter(row => row.vlanId === request.body!.vlanId).map(row => ({ id: row.id, vlanId: row.vlanId }));
   if (request.operation.method === 'POST' && !request.target) return rows;
   if (!rows.some(row => (row.id as string).toLowerCase() === request.target)) return null;
   return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.show)!,
-    { site: request.site, [family.target]: request.target! }, version, ctx.peer) as Record<string, unknown>)[family.row];
+    { site: request.site, [family.target]: request.target! }, version, ctx.peer, true) as Record<string, unknown>)[family.row];
 }
 
 function receipt(record: Intent, requestId: string) {
@@ -137,6 +159,18 @@ function receipt(record: Intent, requestId: string) {
 
 async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> {
   const operation = catalogue.find(op => op.id === record.operation)!;
+  if (record.operation === 'OP-043' || record.operation === 'OP-045') {
+    if (!record.targets) return record.outcome;
+    const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-044')!,
+      { site: record.site }, ctx.api.contract!, ctx.peer, true);
+    const rows = (listing as Record<string, unknown>).vouchers as Record<string, unknown>[];
+    if (record.operation === 'OP-043') return record.targets.every(id => !rows.some(row => row.id === id)) &&
+      ['accepted', 'verified', 'no-op'].includes(record.outcome) ? 'verified' : record.outcome;
+    return ['accepted', 'verified'].includes(record.outcome) && record.targets.every(id => {
+      const row = rows.find(row => row.id === id);
+      return row && digest(Object.fromEntries(record.bodyKeys.map(key => [key, row[key]]))) === record.bodyHash;
+    }) ? 'verified' : record.outcome;
+  }
   if (!record.target && !ordering[record.operation]) return record.outcome;
   const request = { operation: operation.id === 'OP-049' ? catalogue.find(op => op.id === 'OP-050')! : operation,
     site: record.site, target: record.target, body: null, selectors: record.selectors ?? {} };
@@ -147,7 +181,7 @@ async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> 
   return record.outcome;
 }
 
-export async function writeOperation(profiles: Profiles, explicit: string | undefined, redactor: Redactor,
+async function performWrite(profiles: Profiles, explicit: string | undefined, redactor: Redactor,
   operation: Operation, values: Record<string, string>, execute: boolean) {
   if (execute) {
     const selected = await profiles.select(explicit);
@@ -164,18 +198,21 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
     return inspectWrite(profiles, explicit, redactor, values['request-id']!, true);
   }
   const state = await selectedState(ctx, request);
+  if (operation.id === 'OP-043') request.targets = (state as Record<string, unknown>[]).map(row => String(row.id).toLowerCase()).sort();
   if (ordering[operation.id] && (new Set(request.targets).size !== request.targets.length ||
       digest(request.targets.toSorted()) !== digest(orderedIds(state as Record<string, unknown>).toSorted()))) {
     throw new ToolError('WRITE_CONFLICT', 'Ordering must retain exactly the selected IDs without duplicates.');
   }
   const confirmation = digest({ binding: request.binding, state });
   if (!execute) return { preview: { outcome: 'preview', operation: operation.id, grants: request.grants,
-    method: operation.method, origin: ctx.selected.profile.origin, path: `/proxy/network/integration${request.path}`,
+    method: operation.method, origin: ctx.selected.profile.origin,
+    path: `/proxy/network/integration${operation.id === 'OP-043' ? request.path.split('?')[0] + '?filter=[REDACTED]' : request.path}`,
     site: request.site, targets: request.targets, body: request.body, confirmation,
     identity: ctx.identity, applicationVersion: ctx.api.applicationVersion },
     help: ['Repeat the same request with --execute --confirm <confirmation> --request-id <stable-id>. Concurrent vendor changes can occur after the final read.'] };
   if (values.confirm !== confirmation) throw new ToolError('CONFIRMATION_MISMATCH', 'Request, selected state or identity changed. Preview the request again.');
   let projection = request.body;
+  if (operation.id === 'OP-045') projection = Object.fromEntries(Object.entries(request.body!).filter(([key]) => key !== 'count'));
   if (operation.method === 'PUT' && !ordering[operation.id] && operation.id !== 'OP-052') {
     projection = contractValidator(ctx.api.contract!).replacementProjection(
       `#/paths/${escape(operation.path)}/put/requestBody/content/application~1json/schema`, request.body!);
@@ -184,7 +221,9 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
     projection = { ...projection, reportFlowEnabled: true };
   }
   const record = await journal!.claim({ binding: request.binding, identity: ctx.identity, confirmation, operation: operation.id as Intent['operation'],
-    site: request.site, target: request.target, bodyHash: digest(projection), bodyKeys: Object.keys(projection ?? {}).sort(), selectors: request.selectors });
+    site: request.site, target: request.target, bodyHash: digest(projection), bodyKeys: Object.keys(projection ?? {}).sort(),
+    selectors: operation.id === 'OP-043' ? {} : request.selectors,
+    ...(operation.id === 'OP-043' ? { targets: request.targets } : {}) });
   try {
     // Transport calls this after peer verification and before writing HTTP bytes.
     const beforeSend = async () => {
@@ -195,25 +234,36 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
       record.outcome = 'unknown';
       await journal!.save(record);
     };
-    if (operation.method === 'DELETE' && state === null) {
+    if (operation.method === 'DELETE' && (state === null || (operation.id === 'OP-043' && request.targets.length === 0))) {
       record.outcome = 'no-op';
       await journal!.save(record);
       return receipt(record, values['request-id']!);
     }
     if (operation.id === 'OP-049' && (state as unknown[]).length) throw new ToolError('WRITE_CONFLICT', 'The requested VLAN is already present. A similar network cannot prove a previous creation.');
-    const response = await sendMutation(ctx.selected.profile, ctx.secret, request.path, {
+    let path = request.path;
+    if (operation.id === 'OP-043') {
+      const url = new URL(path, ctx.selected.profile.origin);
+      url.searchParams.set('filter', `and(${values.filter},id.in(${request.targets.join(',')}))`);
+      path = url.pathname + url.search;
+    }
+    const response = await sendMutation(ctx.selected.profile, ctx.secret, path, {
       method: operation.method, body: request.body === null ? undefined : JSON.stringify(request.body),
       status: operation.method === 'POST' ? 201 : 200, peer: ctx.peer, beforeSend,
     });
-    if (request.body) {
+    if (request.body || ['OP-043', 'OP-046'].includes(operation.id)) {
       const status = operation.method === 'POST' ? 201 : 200;
       const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}/responses/${status}/content/application~1json/schema`;
       if (contractValidator(ctx.api.contract!).validate(pointer, response).length) throw new ToolError('RESPONSE_INVALID', 'Invalid mutation acknowledgement.');
-      if (operation.method === 'POST') {
+      if (operation.id === 'OP-045') {
+        const rows = (response as { vouchers?: Record<string, unknown>[] }).vouchers;
+        if (!rows || rows.length !== (request.body!.count ?? 1) || rows.some(row => typeof row.id !== 'string' || !uuid.test(row.id)) ||
+            new Set(rows.map(row => String(row.id).toLowerCase())).size !== rows.length) throw new ToolError('RESPONSE_INVALID', 'Invalid generated voucher batch.');
+        record.targets = rows.map(row => String(row.id).toLowerCase()).sort();
+      } else if (operation.method === 'POST') {
         const target = (response as Record<string, unknown>).id;
         if (typeof target !== 'string' || !uuid.test(target)) throw new ToolError('RESPONSE_INVALID', 'Invalid created resource ID.');
         record.target = target.toLowerCase();
-      } else if (record.target && String((response as Record<string, unknown>).id).toLowerCase() !== record.target) {
+      } else if (operation.method !== 'DELETE' && record.target && String((response as Record<string, unknown>).id).toLowerCase() !== record.target) {
         throw new ToolError('RESPONSE_INVALID', 'Mutation acknowledgement does not match the selected resource.');
       }
     }
@@ -229,6 +279,42 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
   return receipt(record, values['request-id']!);
 }
 
+export async function writeOperation(profiles: Profiles, explicit: string | undefined, redactor: Redactor,
+  operation: Operation, values: Record<string, string>, execute: boolean) {
+  const destination = values['secret-output'];
+  if (destination) {
+    if (process.env.UNIFI_AXI_HOSTED === '1') throw new ToolError('HOSTED_DENIED', 'Local secret export is unavailable in hosted execution.');
+    const selected = await profiles.select(explicit);
+    if (selected.profile.allowSecretExport !== true) throw new ToolError('SECRET_EXPORT_DENIED', 'Set allowSecretExport: true in the selected profile to enable --secret-output.');
+    if (!isAbsolute(destination)) throw new ToolError('INVALID_ARGUMENT', '--secret-output requires an absolute path in an existing private directory.');
+  }
+  if (!destination || !execute) return performWrite(profiles, explicit, redactor, operation, values, execute);
+  let result: Awaited<ReturnType<typeof performWrite>> | undefined;
+  try {
+    await new PrivateFiles().create(destination, async () => {
+      result = await performWrite(profiles, explicit, redactor, operation, values, execute);
+      if (!('write' in result) || !['accepted', 'verified'].includes(result.write.outcome)) throw new ToolError('SECRET_DELIVERY_FAILED', 'No accepted resource is available for export.');
+      const ctx = await context(profiles, explicit, redactor);
+      if (ctx.identity !== result.write.identity) throw new ToolError('WRITE_BINDING_MISMATCH', 'Stored request belongs to another identity context.');
+      const family = families.find(family => family.writes.includes(operation.id))!;
+      const ids = result.write.targets ?? (result.write.target ? [result.write.target] : []);
+      const secrets = [];
+      for (const id of ids) {
+        const detail = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.show)!,
+          { site: result.write.site, [family.target]: id }, ctx.api.contract!, ctx.peer, true);
+        secrets.push(...responseSecrets(operation.id === 'OP-045' ? 'OP-047' : 'OP-072',
+          (detail as Record<string, unknown>)[family.row] as Record<string, unknown>, redactor));
+      }
+      return JSON.stringify({ operation: operation.id, secrets }) + '\n';
+    });
+  } catch (error) {
+    if (!result) throw error;
+    return { ...result, delivery: { path: destination, delivered: false },
+      help: [...(result.help ?? []), 'Reconcile the stored request ID, then export its exact IDs using hotspot voucher show or wifi broadcast show --secret-output <new-file>. Never generate again.'] };
+  }
+  return { ...result!, delivery: { path: destination, delivered: true } };
+}
+
 export async function inspectWrite(profiles: Profiles, explicit: string | undefined, redactor: Redactor,
   requestId: string, reconcile: boolean) {
   const ctx = await context(profiles, explicit, redactor);
@@ -239,7 +325,7 @@ export async function inspectWrite(profiles: Profiles, explicit: string | undefi
   if (!reconcile) return receipt(record, requestId);
   // An ambiguous create has no trustworthy vendor ID. Similar objects prove nothing.
   const outcome = await verify(ctx, record);
-  if (!record.target && !ordering[record.operation]) {
+  if (!record.target && !record.targets && !ordering[record.operation]) {
     const family = families.find(family => family.writes.includes(record.operation))!;
     await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!, { site: record.site }, ctx.api.contract!, ctx.peer);
   }

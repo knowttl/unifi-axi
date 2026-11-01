@@ -4,7 +4,7 @@ import { catalogue, description, guidance, examplesFor } from '../dist/catalogue
 await copyFile(new URL('../src/axi-credential.schema.json', import.meta.url), new URL('../dist/axi-credential.schema.json', import.meta.url));
 
 await writeFile(new URL('../dist/capabilities.json', import.meta.url), `${JSON.stringify({
-  stage: 'B4.1', operations: catalogue,
+  stage: 'B4.8', operations: catalogue,
   unsupported: ['WAN changes', 'VPN changes', 'RADIUS changes', 'UniFi OS backup/restore', 'Firmware upgrades', 'Administrator accounts', 'SSH', 'Undocumented endpoints'],
 }, null, 2)}\n`);
 await writeFile(new URL('../dist/SKILL.md', import.meta.url), [
@@ -21,6 +21,7 @@ await writeFile(new URL('../dist/SKILL.md', import.meta.url), [
   'Unknown application versions require an explicit profile apiContract for visibly unverified read-only investigation and cannot execute writes.',
   'Network create, update and delete preview by default. Creation and update support GATEWAY, SWITCH and UNMANAGED, with a protected --body-file. Execution requires writes.allowWrites, exact vendor operation and management variant grants, --execute, --confirm and a stable --request-id. Update uses PUT replacement semantics. Delete force defaults and overrides are confirmation-bound.',
   'Use write show and write reconcile with --request-id for durable ownership recovery. Unknown outcomes never authorize another send. Hosted writes and native Windows writes remain unavailable.',
+  'Wi-Fi broadcast create/update/delete and hotspot voucher create/delete/delete-many use the same write controls. Voucher bulk deletion intersects the original predicate with exactly the previewed IDs. Generation retains all batch IDs. Optional --secret-output on generation or Wi-Fi writes additionally requires profile allowSecretExport: true and reserves a protected destination before mutation. Delivery failure preserves vendor acceptance; repeat the exact owned request to recover all codes through reads without another generation.',
   'Use auth status, profile list and config path offline. Configure with profile configure --profile <name> --file <absolute-profile-json>.',
   'Secrets must be env/file references, never argv or inline profile values. TLS verification cannot be disabled.',
   'No router access or live write is authorized by this catalogue.', '',

@@ -28,6 +28,7 @@ export interface Intent {
   bodyHash: string;
   bodyKeys: string[];
   selectors?: Record<string, string>;
+  targets?: string[];
 }
 
 const hash = /^[a-f0-9]{64}$/;
@@ -72,7 +73,10 @@ export class WriteJournal {
         !Array.isArray(value.bodyKeys) || value.bodyKeys.some(key => typeof key !== 'string') ||
         (value.selectors !== undefined && (!value.selectors || typeof value.selectors !== 'object' || Array.isArray(value.selectors) ||
           Object.entries(value.selectors).some(([key, item]) => !['source-firewall-zone-id', 'destination-firewall-zone-id'].includes(key) || typeof item !== 'string' || !uuid.test(item)))) ||
-        Object.keys(value).filter(key => key !== 'selectors').sort().join() !== 'auditId,binding,bodyHash,bodyKeys,confirmation,identity,operation,outcome,site,target,version') return corrupt();
+        (value.targets !== undefined && (!Array.isArray(value.targets) || value.targets.some(id => typeof id !== 'string' || !uuid.test(id)) || new Set(value.targets.map(id => id.toLowerCase())).size !== value.targets.length)) ||
+        (value.operation === 'OP-043' && value.targets === undefined) ||
+        (value.operation === 'OP-045' && ['accepted', 'verified'].includes(value.outcome) && !value.targets?.length) ||
+        Object.keys(value).filter(key => !['selectors', 'targets'].includes(key)).sort().join() !== 'auditId,binding,bodyHash,bodyKeys,confirmation,identity,operation,outcome,site,target,version') return corrupt();
     value.site = value.site.toLowerCase();
     value.target = value.target?.toLowerCase() ?? null;
     return value;

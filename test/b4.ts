@@ -128,6 +128,7 @@ export async function verifyB4(h: Harness) {
       rows.push({ task: 'B4.1', status: 'pending-native-windows', reason: 'Durable native Windows mutations remain unavailable.' });
       continue;
     }
+    h.configure({ lab: profile });
     const bodyFile = join(h.home, 'b4-network.json');
     for (const [index, body] of bodies.entries()) {
       const variant = `${body.management}-${index}`;

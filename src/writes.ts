@@ -185,9 +185,9 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
   if (operation.method === 'PUT' && !ordering[operation.id]) {
     projection = contractValidator(ctx.api.contract!).replacementProjection(
       `#/paths/${escape(operation.path)}/put/requestBody/content/application~1json/schema`, request.body!);
-    if (operation.id === 'OP-037' && ctx.api.contract === '11.0.97' && !Object.hasOwn(request.body!, 'reportFlowEnabled')) {
-      projection.reportFlowEnabled = true;
-    }
+  }
+  if (['OP-031', 'OP-037'].includes(operation.id) && ctx.api.contract === '11.0.97' && !Object.hasOwn(request.body!, 'reportFlowEnabled')) {
+    projection = { ...projection, reportFlowEnabled: true };
   }
   const record = await journal!.claim({ binding: request.binding, identity: ctx.identity, confirmation, operation: operation.id as Intent['operation'],
     site: request.site, target: request.target, bodyHash: digest(projection), bodyKeys: Object.keys(projection ?? {}).sort(), selectors: request.selectors });

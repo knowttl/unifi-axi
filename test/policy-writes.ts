@@ -103,6 +103,29 @@ export async function verifyPolicyWrites(h: Harness) {
         assert.equal((await run(execute(args, confirmation), 1)).error.code, 'CONFIRMATION_MISMATCH');
         assert.equal(mutations, 0);
       }
+      if (family.task === 'B4.2' && version === '11.0.97') {
+        reset();
+        state = [neighbour];
+        retained = { reportFlowEnabled: false };
+        const body = firewallBody(version);
+        delete body.reportFlowEnabled;
+        const args = command('create', body);
+        const preview = await run(args);
+        assert.deepEqual(preview.preview.body, body);
+        assert.equal(mutations, 0);
+        const requestId = `create-wrong-default-${++serial}`;
+        assert.equal((await run(execute(args, preview.preview.confirmation, requestId))).write.outcome, 'accepted');
+        assert.deepEqual(sent, body);
+        assert.equal(state.find(row => row.id === id)!.reportFlowEnabled, false);
+        assert.deepEqual(state.find(row => row.id === neighbourId), neighbour);
+        assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation.outcome, 'accepted');
+        assert.equal((await run(execute(args, preview.preview.confirmation, requestId))).write.outcome, 'accepted');
+        assert.equal(mutations, 1);
+        state = state.map(row => row.id === id ? { ...row, reportFlowEnabled: true } : row);
+        assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation.outcome, 'verified');
+        assert.equal(mutations, 1);
+        rows.push({ task: family.task, version, action: 'create-independent-default', status: 'passed' });
+      }
       const replacements: { body: Row; retained: Row }[] = [];
       if (family.task === 'B4.4') {
         for (const acl of [aclBodies[0]!, aclBodies[3]!]) {

@@ -69,6 +69,8 @@ export function compileContract(source: unknown, version: string) {
     const additional = typeof schema.additionalProperties === 'object' ? compile(schema.additionalProperties, `${pointer}/additionalProperties`) : undefined;
     const mapping = new Map(Object.entries(schema.discriminator?.mapping ?? {}).map(([tag, ref]) => [tag, compile(at(ref), ref)]));
     const resolution = ledger.resolutions.find(rule => rule.version === version && rule.pointer === pointer);
+    const namedProtocol = ledger.namedProtocols.some(rule => rule.version === version && rule.pointer === pointer);
+    const protocolName = ledger.namedProtocols.some(rule => rule.version === version && `${rule.pointer}/properties/name` === pointer);
     const enumValues = resolution ? resolution.positive : schema.enum;
     const check: Check = (value, path, inherited) => {
       // NORM-001: this response field alone documents null as disabled.
@@ -91,7 +93,7 @@ export function compileContract(source: unknown, version: string) {
         }
       };
       if (schema.type && !(Array.isArray(schema.type) ? schema.type : [schema.type]).some(matches)) fail('wrong type');
-      if (enumValues && !enumValues.some(member => isDeepStrictEqual(member, value))) fail('outside enum');
+      if (enumValues && !enumValues.some(member => isDeepStrictEqual(member, protocolName && typeof value === 'string' ? value.toLowerCase() : value))) fail('outside enum');
       if (typeof value === 'number') {
         if (schema.minimum !== undefined && value < schema.minimum) fail('below minimum');
         if (schema.maximum !== undefined && value > schema.maximum) fail('above maximum');
@@ -124,7 +126,10 @@ export function compileContract(source: unknown, version: string) {
       }
       if (schema.discriminator && !inherited) {
         const tag = object ? (value as Record<string, unknown>)[schema.discriminator.propertyName] : undefined;
-        const selected = typeof tag === 'string' ? mapping.get(tag) : undefined;
+        const selected = typeof tag === 'string' ? mapping.get(namedProtocol ? tag.toUpperCase().replaceAll('-', '_').replaceAll('.', '_') : tag) : undefined;
+        if (namedProtocol && (!selected || !at(`${pointer}/properties/name`).enum?.includes(typeof tag === 'string' ? tag.toLowerCase() : tag))) {
+          throw new ToolError('CONTRACT_CONFLICT', `Unknown named protocol at ${pointer}.`);
+        }
         if (!selected) fail(`missing or unmapped discriminator ${schema.discriminator.propertyName}`);
         else errors.push(...selected(value, path, false));
       }

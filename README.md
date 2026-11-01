@@ -139,7 +139,8 @@ Empty switching lists remain empty; missing details return an explicit upstream 
 `acl-rule order show` returns the ordered rule IDs.
 `firewall policy order show` requires both `--source-firewall-zone-id` and `--destination-firewall-zone-id` and returns ordering for that zone pair.
 Zone details include their network IDs.
-Firewall policy `list` and `show` remain gated by unresolved named-protocol conflicts CF-002 through CF-004 on 10.6.109 and CF-008 through CF-010 on 11.0.97.
+Firewall policy reads accept upper- or lowercase named protocols through the reviewed version-specific resolution for CF-002/CF-003/CF-004 and CF-008/CF-009/CF-010.
+Unknown named protocols return `CONTRACT_CONFLICT`.
 Wi-Fi broadcast `show` remains gated by rate enum conflicts CF-005/CF-006 and CF-011/CF-012 respectively.
 These structural conflicts block the reachable response schema even when the affected optional field is absent or a list is empty.
 These reads return `CONTRACT_CONFLICT` diagnostics naming the selected version, conflict IDs and source pointers.
@@ -188,6 +189,30 @@ Receipts distinguish `not-sent`, `unknown`, `accepted`, `verified` and `no-op`, 
 Keep the same profile/configuration and journal location across invocations.
 Native Windows writes remain gated until directory durability is proven.
 The Artium read fixture has no cross-invocation write custody, so hosted mutations remain denied before vendor access.
+
+## Firewall and ACL writes
+
+`firewall policy` supports `create`, `update`, `patch`, `delete` and `order set`.
+`firewall zone` supports `create`, `update` and `delete`.
+`acl-rule` supports `create`, `update`, `delete` and `order set`.
+These commands share the preview, confirmation, durable request ID and recovery controls described above.
+Use `--body-file <path>` for creates, replacements, patches and ordering; bodies follow the observed application's shipped contract.
+Policy `patch` changes logging settings and, on 11.0.97, flow reporting.
+Named protocol names are emitted in lowercase on writes.
+Source and destination zone selectors are required for policy ordering and are bound into confirmation and recovery.
+Delete and replacement commands require the corresponding resource ID flag shown by `--help`.
+
+Grant each operation independently with its exact vendor name in `writes.operations`:
+
+| Family | Grants |
+|---|---|
+| Firewall policy | `createFirewallPolicy`, `updateFirewallPolicy`, `patchFirewallPolicy`, `deleteFirewallPolicy`, `updateFirewallPolicyOrdering` |
+| Firewall zone | `createFirewallZone`, `updateFirewallZone`, `deleteFirewallZone` |
+| ACL rule | `createAclRule`, `updateAclRule`, `deleteAclRule`, `updateAclRuleOrdering` |
+
+All grants also require `writes.allowWrites: true` and remain subject to the read-only override.
+Ordering receipts verify the final sequence through the documented ordering read.
+A lost acknowledgement stays unknown and is never automatically resent.
 
 ## Credentials and transport
 
@@ -316,6 +341,7 @@ Temporary installation and user state are removed even on failure.
 
 `--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10 and B3.1 through B3.3 selectors, plus the default implemented suite, are supported now.
 The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
+The B4.2, B4.3 and B4.4 selectors exercise policy, zone and ACL writes and ordering against independent fake state under outbound network denial.
 B3 processes run under an outbound network deny allowing only their synthetic vendor listener.
 Hosted journeys remain opt-in and emit an explicit skip reason when no frozen fixture is configured.
 The B2.2-B2.9 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants, policy ordering, ACL/DNS/traffic variants, voucher and Wi-Fi redaction, switching structures and the documented contract gates.

@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { PrivateFiles } from './private-file.js';
 import { ToolError } from './security.js';
+import { writeOperations } from './catalogue.js';
 
 export function digest(value: unknown): string {
   function canonical(item: unknown): unknown {
@@ -20,12 +21,13 @@ export interface Intent {
   binding: string;
   identity: string;
   confirmation: string;
-  operation: 'OP-049' | 'OP-050';
+  operation: string;
   site: string;
   target: string | null;
   outcome: 'not-sent' | 'unknown' | 'accepted' | 'verified' | 'no-op';
   bodyHash: string;
   bodyKeys: string[];
+  selectors?: Record<string, string>;
 }
 
 const hash = /^[a-f0-9]{64}$/;
@@ -64,11 +66,13 @@ export class WriteJournal {
     try { value = JSON.parse(text) as Intent; } catch { return corrupt(); }
     if (!value || value.version !== 1 || !uuid.test(value.auditId) ||
         ![value.binding, value.identity, value.confirmation, value.bodyHash].every(item => typeof item === 'string' && hash.test(item)) ||
-        !['OP-049', 'OP-050'].includes(value.operation) || typeof value.site !== 'string' || !uuid.test(value.site) ||
+        !writeOperations.has(value.operation) || typeof value.site !== 'string' || !uuid.test(value.site) ||
         (value.target !== null && (typeof value.target !== 'string' || !uuid.test(value.target))) ||
         !['not-sent', 'unknown', 'accepted', 'verified', 'no-op'].includes(value.outcome) ||
-        !Array.isArray(value.bodyKeys) || value.bodyKeys.some(key => typeof key !== 'string' || !['name', 'enabled', 'management', 'vlanId', 'dhcpGuarding'].includes(key)) ||
-        Object.keys(value).sort().join() !== 'auditId,binding,bodyHash,bodyKeys,confirmation,identity,operation,outcome,site,target,version') return corrupt();
+        !Array.isArray(value.bodyKeys) || value.bodyKeys.some(key => typeof key !== 'string') ||
+        (value.selectors !== undefined && (!value.selectors || typeof value.selectors !== 'object' || Array.isArray(value.selectors) ||
+          Object.entries(value.selectors).some(([key, item]) => !['source-firewall-zone-id', 'destination-firewall-zone-id'].includes(key) || typeof item !== 'string' || !uuid.test(item)))) ||
+        Object.keys(value).filter(key => key !== 'selectors').sort().join() !== 'auditId,binding,bodyHash,bodyKeys,confirmation,identity,operation,outcome,site,target,version') return corrupt();
     value.site = value.site.toLowerCase();
     value.target = value.target?.toLowerCase() ?? null;
     return value;

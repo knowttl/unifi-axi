@@ -31,6 +31,9 @@ interface Contract {
 
 export const versions = ['10.6.109', '11.0.97'] as const;
 
+export const writeOperations = new Set(['OP-049', 'OP-050', 'OP-008', 'OP-010', 'OP-011', 'OP-013',
+  'OP-031', 'OP-033', 'OP-034', 'OP-036', 'OP-037', 'OP-039', 'OP-040', 'OP-042']);
+
 export const readOperations = new Set(['OP-003', 'OP-004', 'OP-005', 'OP-006', 'OP-014', 'OP-015',
   'OP-017', 'OP-018', 'OP-021', 'OP-024', 'OP-048', 'OP-051', 'OP-053', 'OP-054', 'OP-066', 'OP-067', 'OP-068',
   'OP-007', 'OP-009', 'OP-012', 'OP-025', 'OP-028', 'OP-030', 'OP-032', 'OP-035', 'OP-038', 'OP-041',
@@ -57,7 +60,7 @@ export const catalogue = commands.map(command => {
     method: primary.method,
     path: primary.path,
     effect: primary.method === 'GET' ? 'read' : 'write',
-    status: ['info', 'site list'].includes(command.command) || readOperations.has(command.id) || ['OP-049', 'OP-050'].includes(command.id) ? 'implemented' : 'not-implemented',
+    status: ['info', 'site list'].includes(command.command) || readOperations.has(command.id) || writeOperations.has(command.id) ? 'implemented' : 'not-implemented',
     contracts: variants.map(({ version, parameters = [], requestBody, responses }) => ({
       version, source: `evidence/sources/network-${version}-openapi.json`,
       parameters, ...(requestBody ? { requestBody } : {}), responses,
@@ -84,5 +87,5 @@ export const guidance = [
   'Use unifi-axi commands for offline discovery and unifi-axi <command> --help for inputs, defaults and effects.',
   'Select context with --profile <name>, --config <absolute-path> and --site <site-id>.',
   'Install directory-scoped ambient context with setup --app <claude|codex|opencode> --directory <absolute-path> --profile <name>. Preview first, then repeat with --execute --confirm <digest>.',
-  'Secrets must be env/file references. TLS verification cannot be disabled. Writes remain unavailable.',
+  'Secrets must be env/file references. TLS verification cannot be disabled. Implemented writes require preview, exact grants, confirmation and a stable request ID.',
 ];

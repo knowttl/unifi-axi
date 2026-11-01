@@ -112,7 +112,7 @@ export async function main(args: string[]): Promise<number> {
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
-        output: foundationWrites.has(operation.id) ? 'Preview by default. Execution requires exact grants, matching confirmation and a stable request ID. Creation currently supports UNMANAGED networks only.' : operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract.' : 'No vendor output until implemented. This operation fails before network access.',
+        output: foundationWrites.has(operation.id) ? 'Preview by default. Execution requires exact grants, matching confirmation and a stable request ID. Network creation supports UNMANAGED networks only.' : operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract.' : 'No vendor output until implemented. This operation fails before network access.',
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
         })), examples: examplesFor(operation) });

@@ -252,11 +252,16 @@ Set-Acl -LiteralPath $p -AclObject $acl
       }));
       if (writeTask) {
         const { verifyWrites } = await import('./writes.ts');
-        inventoryRows.push(...await verifyWrites({
+        const harness = {
           cli: (args, code = 0, overrides = {}) => cli(args, code, { ...keys, ...overrides }, false),
           configure, trusted, home, config, port, syntheticKey, task: writeTask,
           seed: handler => { requests = []; respond = handler; }, requests: () => requests,
-        }));
+        };
+        if (writeTask === 'all' || writeTask.startsWith('B3.')) inventoryRows.push(...await verifyWrites({ ...harness, task: writeTask === 'all' ? 'B3.3' : writeTask }));
+        if (writeTask === 'all' || writeTask.startsWith('B4.')) {
+          const { verifyPolicyWrites } = await import('./policy-writes.ts');
+          inventoryRows.push(...await verifyPolicyWrites(harness));
+        }
       }
     }
   } finally {

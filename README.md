@@ -160,7 +160,7 @@ Authentication keys remain redacted even at an allowlisted location.
 Ordinary output contains IDs and a delivery receipt only.
 An existing destination is never replaced, and a failed read removes the reserved file so the read can be repeated with a new destination.
 Hosted execution refuses local exports before resolving a profile or contacting the vendor.
-Mutation-time secret delivery remains pending B4.8.
+See [Wi-Fi broadcasts and vouchers](#wi-fi-broadcasts-and-vouchers) for mutation-time secret delivery and recovery.
 
 Voucher `code` fields and Wi-Fi `passphrase` fields are replaced with `[REDACTED]` in default output.
 Diagnostic `error.code` fields remain visible.

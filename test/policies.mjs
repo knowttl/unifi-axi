@@ -157,15 +157,18 @@ export async function verifyPolicies({ cli, seed }) {
     serve(() => ({ offset: 0, limit: 25, count: 1, totalCount: 1, data: [wifi] }));
     assert.deepEqual((await run('wifi broadcast list')).wifiBroadcasts,
       [{ ...wifi, securityConfiguration: { type: 'WPA2_PERSONAL', passphrase: '[REDACTED]' } }]);
-    const wifiConflictIds = version === '10.6.109' ? ['CF-005', 'CF-006'] : ['CF-011', 'CF-012'];
-    const wifiConflicts = ['2.4', '5'].map((frequency, index) =>
-      `${wifiConflictIds[index]} #/components/schemas/IntegrationWifiBasicDataRateConfigurationDto/properties/${frequency}`);
-    for (const record of [wifi, { ...wifi, basicDataRateKbpsByFrequencyGHz: { '2.4': 'invalid' } }]) {
+    const detail = { ...wifi, channel2gLockedTo6: false, clientIsolationEnabled: true, dtimPeriod2gLockedTo3: false,
+      hideName: false, multicastToUnicastConversionEnabled: true, uapsdEnabled: true,
+      advertiseDeviceName: false, arpProxyEnabled: true, bssTransitionEnabled: true,
+      basicDataRateKbpsByFrequencyGHz: { '2.4': 2000, '5': 6000 } };
+    serve(() => detail);
+    assert.deepEqual((await run('wifi broadcast show', ['--wifi-broadcast-id', id])).wifiBroadcast,
+      { ...detail, securityConfiguration: { type: 'WPA2_PERSONAL', passphrase: '[REDACTED]' } });
+    for (const record of [wifi, { ...detail, basicDataRateKbpsByFrequencyGHz: { '2.4': '2000', '5': 6000 } }]) {
       serve(() => record);
-      assert.deepEqual((await run('wifi broadcast show', ['--wifi-broadcast-id', id], 1)).error, { code: 'CONTRACT_CONFLICT',
-        message: `Response validation for ${version} blocked by ${wifiConflicts.join(', ')}.` });
+      assert.equal((await run('wifi broadcast show', ['--wifi-broadcast-id', id], 1)).error.code, 'RESPONSE_INVALID');
     }
-    rows.push({ command: 'firewall policy and wifi broadcast show', version, status: 'known-contract-conflict' },
+    rows.push({ command: 'firewall policy', version, status: 'known-contract-conflict' },
       { command: 'hotspot voucher and wifi broadcast list', version, status: 'passed', direction: 'redacted' });
   }
   return rows;

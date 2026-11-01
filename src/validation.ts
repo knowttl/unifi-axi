@@ -71,8 +71,8 @@ export function compileContract(source: unknown, version: string) {
     const resolution = ledger.resolutions.find(rule => rule.version === version && rule.pointer === pointer);
     const enumValues = resolution ? resolution.positive : schema.enum;
     const check: Check = (value, path, inherited) => {
-      // NORM-001: this response field alone documents null as disabled.
-      if (value === null && ledger.nullResponses.some(rule => rule.version === version && rule.pointer === pointer)) return [];
+      // NORM-001 applies only to the approved DHCP guarding request/response fields.
+      if (value === null && [...ledger.nullResponses, ...ledger.nullRequests].some(rule => rule.version === version && rule.pointer === pointer)) return [];
       const errors: string[] = [];
       const fail = (message: string) => errors.push(`${path}: ${message} [schema=${pointer}]`);
       if (reference) errors.push(...reference(value, path, inherited));
@@ -145,6 +145,36 @@ export function compileContract(source: unknown, version: string) {
   }
   return {
     validate(pointer: string, value: unknown): string[] { return compile(at(pointer), pointer)(value, '', false); },
+    validateRequest(pointer: string, value: unknown): string[] {
+      const errors = compile(at(pointer), pointer)(value, '', false);
+      // Requests may contain only fields declared by the selected contract and subtype.
+      function fields(schema: Schema, item: unknown, seen = new Set<Schema>()): Record<string, Schema> {
+        if (seen.has(schema)) return {};
+        seen.add(schema);
+        const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+        const tag = schema.discriminator && record[schema.discriminator.propertyName];
+        const subtype = typeof tag === 'string' ? schema.discriminator?.mapping[tag] : undefined;
+        return Object.assign({}, schema.$ref ? fields(at(schema.$ref), item, seen) : {},
+          ...(schema.allOf ?? []).map(parent => fields(parent, item, seen)),
+          schema.properties ?? {}, subtype ? fields(at(subtype), item, seen) : {});
+      }
+      function visit(schema: Schema, item: unknown, path: string): void {
+        if (schema.$ref) { visit(at(schema.$ref), item, path); return; }
+        if (Array.isArray(item)) {
+          if (schema.items) item.forEach((entry, index) => visit(schema.items!, entry, `${path}/${index}`));
+        } else if (item && typeof item === 'object') {
+          const properties = fields(schema, item);
+          for (const [key, entry] of Object.entries(item)) {
+            const child = Object.hasOwn(properties, key) ? properties[key] : undefined;
+            if (child) visit(child, entry, `${path}/${escape(key)}`);
+            else if (typeof schema.additionalProperties === 'object') visit(schema.additionalProperties, entry, `${path}/${escape(key)}`);
+            else errors.push(`${path}/${escape(key)}: undeclared request field`);
+          }
+        }
+      }
+      visit(at(pointer), value, '');
+      return errors;
+    },
     structuralConflicts(pointer: string) {
       const reachable = new Set<string>();
       function visit(schema: Schema, location: string): void {
@@ -159,6 +189,7 @@ export function compileContract(source: unknown, version: string) {
       }
       visit(at(pointer), pointer);
       return conflicts.rows.filter(row => row.version === version && row.status === 'blocked' &&
+        !ledger.resolutions.some(rule => rule.version === version && rule.id === row.id) &&
         row.kind !== 'description_vs_null_schema' && reachable.has(row.pointer));
     },
   };
@@ -183,7 +214,8 @@ export function contractValidator(version: string) {
 
 export function contractConflicts(version: string, family?: string) {
   return conflicts.rows.filter(row => row.version === version &&
-    (family === undefined || row.assignments.some(assignment => assignment.family === family)));
+    (family === undefined || row.assignments.some(assignment => assignment.family === family)))
+    .map(row => ({ ...row, status: ledger.resolutions.some(rule => rule.version === version && rule.id === row.id) ? 'resolved' : row.status }));
 }
 
 export function validateResponse(version: string, operationId: string, value: unknown): void {

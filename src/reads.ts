@@ -21,7 +21,7 @@ const names: Record<string, string> = {
 };
 
 export async function readOperation(profile: Profile, secret: string, operation: Operation,
-  values: Record<string, string>, version: string, peer?: PeerIdentity) {
+  values: Record<string, string>, version: string, peer?: PeerIdentity, responseSecrets = false) {
   let path = operation.path;
   const parameters = operation.contracts.find(contract => contract.version === version)!.parameters;
   for (const parameter of parameters.filter(parameter => parameter.in === 'path')) {
@@ -34,8 +34,8 @@ export async function readOperation(profile: Profile, secret: string, operation:
     const result = await readJson(profile, secret, url, budget, peer);
     validateResponse(version, operation.id, result);
     // Voucher codes are credentials; diagnostic error.code fields stay visible.
-    if (operation.id === 'OP-047') (result as RecordData).code = '[REDACTED]';
-    if (operation.id === 'OP-044') for (const voucher of (result as { data: RecordData[] }).data) voucher.code = '[REDACTED]';
+    if (!responseSecrets && operation.id === 'OP-047') (result as RecordData).code = '[REDACTED]';
+    if (!responseSecrets && operation.id === 'OP-044') for (const voucher of (result as { data: RecordData[] }).data) voucher.code = '[REDACTED]';
     return result as RecordData;
   };
   const name = names[operation.id]!;

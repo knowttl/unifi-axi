@@ -57,7 +57,7 @@ export const catalogue = commands.map(command => {
     method: primary.method,
     path: primary.path,
     effect: primary.method === 'GET' ? 'read' : 'write',
-    status: ['info', 'site list'].includes(command.command) || readOperations.has(command.id) || ['OP-049', 'OP-050'].includes(command.id) ? 'implemented' : 'not-implemented',
+    status: ['info', 'site list'].includes(command.command) || readOperations.has(command.id) || ['OP-049', 'OP-050', 'OP-052'].includes(command.id) ? 'implemented' : 'not-implemented',
     contracts: variants.map(({ version, parameters = [], requestBody, responses }) => ({
       version, source: `evidence/sources/network-${version}-openapi.json`,
       parameters, ...(requestBody ? { requestBody } : {}), responses,
@@ -71,7 +71,7 @@ export function parameterFlag(name: string): string {
   return name === 'siteId' ? 'site' : name.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
 }
 
-export const description = 'Read UniFi Network application, inventory, policies and switching information.';
+export const description = 'Read UniFi Network information and manage network configuration with confirmed writes.';
 
 export function examplesFor(operation: Operation): string[] {
   const required = operation.contracts[0]!.parameters.filter(parameter => parameter.required)
@@ -84,5 +84,5 @@ export const guidance = [
   'Use unifi-axi commands for offline discovery and unifi-axi <command> --help for inputs, defaults and effects.',
   'Select context with --profile <name>, --config <absolute-path> and --site <site-id>.',
   'Install directory-scoped ambient context with setup --app <claude|codex|opencode> --directory <absolute-path> --profile <name>. Preview first, then repeat with --execute --confirm <digest>.',
-  'Secrets must be env/file references. TLS verification cannot be disabled. Writes remain unavailable.',
+  'Secrets must be env/file references. TLS verification cannot be disabled. Network writes require explicit grants, preview confirmation and a stable request ID.',
 ];

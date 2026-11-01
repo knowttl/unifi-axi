@@ -9,5 +9,5 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["writes.ts", "fixtures/write-guard.ts"]
+  "include": ["writes.ts", "b4.ts", "fixtures/write-guard.ts"]
 }

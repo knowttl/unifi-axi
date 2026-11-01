@@ -111,6 +111,7 @@ Set-Acl -LiteralPath $p -AclObject $acl
     { ...source, apiKey: { env: 'SYNTHETIC_KEY', file: secretFile } },
     { ...source, apiKey: { file: './relative' } }, { ...source, unexpected: true },
     { ...source, apiContract: ['10.6.109'] },
+    { ...source, allowSecretExport: 'true' },
     { ...source, origin: 'http://localhost' }, { ...source, origin: 'https://localhost/path' },
     { ...source, origin: 'https://user:password@localhost' },
     { ...source, tls: { insecure: true } }, { ...source, writes: { allowWrites: true, operations: [], extra: true } },
@@ -254,9 +255,17 @@ Set-Acl -LiteralPath $p -AclObject $acl
         const { verifyWrites } = await import('./writes.ts');
         inventoryRows.push(...await verifyWrites({
           cli: (args, code = 0, overrides = {}) => cli(args, code, { ...keys, ...overrides }, false),
-          configure, trusted, home, config, port, syntheticKey, task: writeTask,
+          configure, trusted, home, config, port, syntheticKey, task: writeTask.startsWith('B4.') ? 'B3.3' : writeTask,
           seed: handler => { requests = []; respond = handler; }, requests: () => requests,
         }));
+        if (writeTask.startsWith('B4.')) {
+          const { verifyB4 } = await import('./b4.ts');
+          inventoryRows.push(...await verifyB4({
+            cli: (args, code = 0, overrides = {}) => cli(args, code, { ...keys, ...overrides }, false),
+            configure, trusted, home, port, syntheticKey, task: writeTask,
+            seed: handler => { requests = []; respond = handler; }, requests: () => requests,
+          }));
+        }
       }
     }
   } finally {

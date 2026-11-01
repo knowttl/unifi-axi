@@ -10,6 +10,7 @@ All 73 vendor operations are discoverable.
 `info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
 Read coverage includes [inventory and networks](#inventory-clients-networks-and-references) and [policies, vouchers, Wi-Fi and switching](#policies-vouchers-wi-fi-and-switching), subject to the documented contract gates.
 Network creation and deletion support [previews and explicitly granted execution](#network-write-foundation).
+[Firewall and ACL writes](#firewall-and-acl-writes) extend these controls to policies, zones, rules and ordering.
 Use `unifi-axi commands` for each operation's implementation status; unimplemented operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
@@ -183,7 +184,7 @@ Empty, truncated or corrupt claims fail closed and never expire into retry permi
 `write show --request-id <id>` reports the stored intent for the selected identity.
 `write reconcile --request-id <id>` uses documented reads and records a separate observation without replacing ownership.
 A verified acknowledgement plus its exact returned ID can establish the created resource through a subsequent read.
-A lost acknowledgement stays `unknown`; finding a similar network cannot prove that creation succeeded.
+A lost acknowledgement stays `unknown`; finding a similar resource cannot prove that creation succeeded.
 An independently read absent deletion target returns `no-op` without sending a mutation.
 Receipts distinguish `not-sent`, `unknown`, `accepted`, `verified` and `no-op`, with an audit ID for recovery.
 Keep the same profile/configuration and journal location across invocations.
@@ -197,7 +198,10 @@ The Artium read fixture has no cross-invocation write custody, so hosted mutatio
 `acl-rule` supports `create`, `update`, `delete` and `order set`.
 These commands share the preview, confirmation, durable request ID and recovery controls described above.
 Use `--body-file <path>` for creates, replacements, patches and ordering; bodies follow the observed application's shipped contract.
+`update` replaces the selected resource rather than merging fields.
+Independent verification includes omitted optional fields and selected-contract defaults, so retained filters or incorrect defaults leave the receipt `accepted` rather than `verified`.
 Policy `patch` changes logging settings and, on 11.0.97, flow reporting.
+Patch verification compares only submitted fields; policy create and replacement verification also check the selected contract's documented flow-reporting default when omitted.
 Named protocol names are emitted in lowercase on writes.
 Source and destination zone selectors are required for policy ordering and are bound into confirmation and recovery.
 Delete and replacement commands require the corresponding resource ID flag shown by `--help`.
@@ -212,7 +216,7 @@ Grant each operation independently with its exact vendor name in `writes.operati
 
 All grants also require `writes.allowWrites: true` and remain subject to the read-only override.
 Ordering receipts verify the final sequence through the documented ordering read.
-A lost acknowledgement stays unknown and is never automatically resent.
+Ordering bodies must retain exactly the selected IDs without duplicates.
 
 ## Credentials and transport
 
@@ -303,7 +307,7 @@ UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI format
 The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
 Unresolved structural conflicts block operations whose response schemas reach the conflicting field, with the retained device-family exception described in [Inventory, clients, networks and references](#inventory-clients-networks-and-references).
 Application and site validation remain available.
-The normalization ledger owns the reviewed PoE resolution and response-side NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
+The normalization ledger owns the reviewed PoE and named-protocol resolutions and response-side NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
 
 ## Development and verification
 

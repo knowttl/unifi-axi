@@ -277,6 +277,54 @@ export async function verifyPolicyWrites(h: Harness) {
           assert.equal(mutations, 0);
         }
       }
+      if (family.task === 'B4.6') {
+        const invalidEntries: [string, Row][] = [
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS', value: 'not-an-ip' }],
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS', value: '256.0.0.1' }],
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS', value: '2001:db8::1' }],
+          ['IPV6_ADDRESSES', { type: 'IP_ADDRESS', value: 'not-an-ip' }],
+          ['IPV6_ADDRESSES', { type: 'IP_ADDRESS', value: '2001:db8::gg' }],
+          ['IPV6_ADDRESSES', { type: 'IP_ADDRESS', value: '192.0.2.1' }],
+          ['IPV6_ADDRESSES', { type: 'IP_ADDRESS', value: 'fe80::1%eth0' }],
+          ['IPV4_ADDRESSES', { type: 'SUBNET', value: 'not-an-ip/24' }],
+          ['IPV4_ADDRESSES', { type: 'SUBNET', value: '2001:db8::/24' }],
+          ['IPV4_ADDRESSES', { type: 'SUBNET', value: '192.0.2.0/33' }],
+          ['IPV4_ADDRESSES', { type: 'SUBNET', value: '192.0.2.0/-1' }],
+          ['IPV4_ADDRESSES', { type: 'SUBNET', value: '192.0.2.0/1.5' }],
+          ['IPV4_ADDRESSES', { type: 'SUBNET', value: '192.0.2.0/' }],
+          ['IPV4_ADDRESSES', { type: 'SUBNET', value: '192.0.2.0/24/1' }],
+          ['IPV6_ADDRESSES', { type: 'SUBNET', value: 'not-an-ip/64' }],
+          ['IPV6_ADDRESSES', { type: 'SUBNET', value: '192.0.2.0/24' }],
+          ['IPV6_ADDRESSES', { type: 'SUBNET', value: '2001:db8::/129' }],
+          ['IPV6_ADDRESSES', { type: 'SUBNET', value: '2001:db8::/-1' }],
+          ['IPV6_ADDRESSES', { type: 'SUBNET', value: '2001:db8::/1.5' }],
+          ['IPV6_ADDRESSES', { type: 'SUBNET', value: '2001:db8::' }],
+          ['IPV6_ADDRESSES', { type: 'SUBNET', value: 'fe80::%eth0/64' }],
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS_RANGE', start: 'not-an-ip', stop: '192.0.2.10' }],
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS_RANGE', start: '192.0.2.1', stop: 'not-an-ip' }],
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS_RANGE', start: '2001:db8::1', stop: '192.0.2.10' }],
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS_RANGE', start: '192.0.2.1', stop: '2001:db8::10' }],
+          ['IPV4_ADDRESSES', { type: 'IP_ADDRESS_RANGE', start: '192.0.2.10', stop: '192.0.2.2' }],
+          ['PORTS', { type: 'PORT_NUMBER', value: 0 }],
+          ['PORTS', { type: 'PORT_NUMBER', value: 65536 }],
+          ['PORTS', { type: 'PORT_NUMBER_RANGE', start: 8080, stop: 8000 }],
+          ['PORTS', { type: 'PORT_NUMBER_RANGE', start: 0, stop: 80 }],
+          ['PORTS', { type: 'PORT_NUMBER_RANGE', start: 65536, stop: 65536 }],
+          ['PORTS', { type: 'PORT_NUMBER_RANGE', start: 1, stop: 0 }],
+          ['PORTS', { type: 'PORT_NUMBER_RANGE', start: 80, stop: 65536 }],
+        ];
+        for (const [type, entry] of invalidEntries) {
+          for (const action of ['create', 'update']) {
+            reset();
+            const before = structuredClone(state);
+            const args = command(action, { name: 'Invalid entry', type, items: [entry] });
+            assert.equal((await run(args, 1)).error.code, 'INVALID_ARGUMENT', JSON.stringify({ version, action, type, entry }));
+            assert.equal((await run(execute(args, 'invalid-entry'), 1)).error.code, 'INVALID_ARGUMENT');
+            assert.equal(mutations, 0);
+            assert.deepEqual(state, before);
+          }
+        }
+      }
       if (family.task === 'B4.2') {
         for (const name of ['TCP', 'tcp']) {
           reset(); state = [neighbour];

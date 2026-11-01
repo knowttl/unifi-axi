@@ -22,9 +22,15 @@ export const dnsBodies: Row[] = [
 export const trafficBodies: Row[] = [
   { name: 'Lab IPv4', type: 'IPV4_ADDRESSES', items: [
     { type: 'IP_ADDRESS', value: '192.0.2.10' }, { type: 'SUBNET', value: '198.51.100.0/24' },
-    { type: 'IP_ADDRESS_RANGE', start: '203.0.113.1', stop: '203.0.113.10' }] },
+    { type: 'IP_ADDRESS_RANGE', start: '203.0.113.1', stop: '203.0.113.10' },
+    { type: 'SUBNET', value: '0.0.0.0/0' }, { type: 'SUBNET', value: '192.0.2.1/32' },
+    { type: 'IP_ADDRESS_RANGE', start: '192.0.2.2', stop: '192.0.2.10' },
+    { type: 'IP_ADDRESS_RANGE', start: '192.0.2.1', stop: '192.0.2.1' }] },
   { name: 'Lab IPv6', type: 'IPV6_ADDRESSES', items: [
-    { type: 'IP_ADDRESS', value: '2001:db8::1' }, { type: 'SUBNET', value: '2001:db8:1::/64' }] },
+    { type: 'IP_ADDRESS', value: '2001:db8::1' }, { type: 'SUBNET', value: '2001:db8:1::/64' },
+    { type: 'SUBNET', value: '::/0' }, { type: 'SUBNET', value: '2001:db8::1/128' }] },
   { name: 'Lab ports', type: 'PORTS', items: [
-    { type: 'PORT_NUMBER', value: 443 }, { type: 'PORT_NUMBER_RANGE', start: 8000, stop: 8080 }] },
+    { type: 'PORT_NUMBER', value: 443 }, { type: 'PORT_NUMBER_RANGE', start: 8000, stop: 8080 },
+    { type: 'PORT_NUMBER', value: 1 }, { type: 'PORT_NUMBER', value: 65535 },
+    { type: 'PORT_NUMBER_RANGE', start: 1, stop: 65535 }, { type: 'PORT_NUMBER_RANGE', start: 443, stop: 443 }] },
 ];

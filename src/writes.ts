@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 import { application, sites, selectSite } from './application.js';
 import { catalogue, parameterFlag, writeOperations, type Operation } from './catalogue.js';
 import { Profiles, writeAllowed, type Selection } from './profiles.js';
@@ -43,6 +44,31 @@ function normalizeProtocols(value: unknown): void {
     if (typeof protocol.name === 'string') protocol.name = protocol.name.toLowerCase();
   }
   Object.values(record).forEach(normalizeProtocols);
+}
+
+function validateTrafficList(body: Record<string, unknown>): void {
+  const family = body.type === 'IPV4_ADDRESSES' ? 4 : 6;
+  const valid = (body.items as Record<string, unknown>[]).every(item => {
+    if (item.type === 'IP_ADDRESS') {
+      const value = item.value as string;
+      return isIP(value) === family && !value.includes('%');
+    }
+    if (item.type === 'SUBNET') {
+      const parts = (item.value as string).match(/^(.+)\/(\d{1,3})$/);
+      return parts !== null && isIP(parts[1]!) === family && !parts[1]!.includes('%') &&
+        Number(parts[2]) <= (family === 4 ? 32 : 128);
+    }
+    if (item.type === 'IP_ADDRESS_RANGE') {
+      const start = item.start as string;
+      const stop = item.stop as string;
+      return isIP(start) === 4 && isIP(stop) === 4 &&
+        start.split('.').reduce((value, octet) => value * 256 + Number(octet), 0) <=
+        stop.split('.').reduce((value, octet) => value * 256 + Number(octet), 0);
+    }
+    if (item.type === 'PORT_NUMBER_RANGE') return (item.start as number) <= (item.stop as number);
+    return true;
+  });
+  if (!valid) throw new ToolError('INVALID_ARGUMENT', 'Traffic list entries require valid addresses, CIDR prefixes and ordered ranges.');
 }
 
 function policy(selected: Selection, grants: string[]): void {
@@ -120,6 +146,7 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
       throw new ToolError('INVALID_ARGUMENT', 'Request body does not match the selected Network contract.');
     }
     body = parsed as Record<string, unknown>;
+    if (['OP-062', 'OP-065'].includes(operation.id)) validateTrafficList(body);
     if (operation.command.startsWith('firewall policy ')) normalizeProtocols(body);
     if (['OP-049', 'OP-052'].includes(operation.id)) grants.push(`${operation.vendorOperationId}:${String(body.management)}`);
   }

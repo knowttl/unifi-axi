@@ -147,6 +147,9 @@ Firewall policy `list` and `show` return `CONTRACT_CONFLICT` diagnostics naming 
 No source conflict is silently normalized.
 
 `hotspot voucher list/show` and `wifi broadcast list/show` accept `--secret-output <absolute-path>` for standalone protected response export.
+Exports default off and require `"allowSecretExport": true` in the selected file profile as well as the explicit output flag.
+Without that standing profile opt-in, `SECRET_EXPORT_DENIED` names `allowSecretExport` and refuses before credential resolution, vendor access or file reservation.
+`UNIFI_AXI_READ_ONLY` continues to govern native mutations; it does not replace or change the separate export opt-in.
 The destination must be new and inside an existing private directory.
 The file contains JSON entries with a resource ID, an allowlisted response path and its secret value.
 Voucher codes and personal Wi-Fi passphrases, including WPA2 personal preshared keys, are the only exported values.

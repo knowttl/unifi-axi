@@ -190,6 +190,9 @@ export async function main(args: string[]): Promise<number> {
       }
       const selected = await profiles.select(values.profile);
       if (selected.source === 'file') profileContext = ` --profile ${quote(selected.name)}`;
+      if (values['secret-output'] && selected.profile.allowSecretExport !== true) {
+        throw new ToolError('SECRET_EXPORT_DENIED', 'Set allowSecretExport: true in the selected profile to enable --secret-output.');
+      }
       const secret = await profiles.secret(selected.profile, redactor);
       if (command === 'auth status') {
         const ref = selected.profile.apiKey;

@@ -111,6 +111,7 @@ Set-Acl -LiteralPath $p -AclObject $acl
     { ...source, apiKey: { env: 'SYNTHETIC_KEY', file: secretFile } },
     { ...source, apiKey: { file: './relative' } }, { ...source, unexpected: true },
     { ...source, apiContract: ['10.6.109'] },
+    { ...source, allowSecretExport: 'true' },
     { ...source, origin: 'http://localhost' }, { ...source, origin: 'https://localhost/path' },
     { ...source, origin: 'https://user:password@localhost' },
     { ...source, tls: { insecure: true } }, { ...source, writes: { allowWrites: true, operations: [], extra: true } },

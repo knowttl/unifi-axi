@@ -61,7 +61,8 @@ export async function verifyB4(h: Harness) {
   const run = (args: string[], code = 0, overrides: Record<string, string> = {}) => h.cli(args, code, { ...env, ...overrides });
   const profile = { ...h.trusted, siteId: site, writes: { allowWrites: true,
     operations: ['deleteNetwork', ...['createNetwork', 'updateNetwork'].flatMap(op => [op, ...['UNMANAGED', 'SWITCH', 'GATEWAY'].map(tag => `${op}:${tag}`)])] } };
-  h.configure({ lab: profile });
+  const exportProfile = { ...profile, allowSecretExport: true };
+  h.configure({ lab: exportProfile });
   for (const version of ['10.6.109', '11.0.97']) {
     for (const [operation, words, resource] of [
       ['OP-044', ['hotspot', 'voucher', 'list'], 'voucher'],
@@ -84,7 +85,16 @@ export async function verifyB4(h: Harness) {
       });
       const destination = join(h.home, `${operation}-${version}.json`);
       const args = [...words, '--secret-output', destination];
-      const result = await run(args);
+      h.configure({ lab: profile });
+      const refusedFile = join(h.home, `disabled-${operation}-${version}.json`);
+      const beforeRefusal = h.requests().length;
+      assert.deepEqual((await run([...words, '--secret-output', refusedFile], 1)).error, {
+        code: 'SECRET_EXPORT_DENIED', message: 'Set allowSecretExport: true in the selected profile to enable --secret-output.',
+      });
+      assert.equal(h.requests().length, beforeRefusal, 'A profile without standing export opt-in sends no vendor request');
+      assert.equal(existsSync(refusedFile), false);
+      h.configure({ lab: exportProfile });
+      const result = await run(args, 0, { UNIFI_AXI_READ_ONLY: 'true' });
       assert.deepEqual(result, { ids: [id], receipt: { operation, path: destination, delivered: true } });
       assert.deepEqual(JSON.parse(readFileSync(destination, 'utf8')), { operation, secrets: expected });
       if (process.platform !== 'win32') {

@@ -121,7 +121,7 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
   const previous = await journal?.read();
   if (previous) {
     if (previous.binding !== request.binding || previous.confirmation !== values.confirm) throw new ToolError('WRITE_BINDING_MISMATCH', 'Request ID is bound to another request or identity.');
-    return receipt(previous, values['request-id']!);
+    return inspectWrite(profiles, explicit, redactor, values['request-id']!, true);
   }
   const state = await selectedState(ctx, request);
   const confirmation = digest({ binding: request.binding, state });
@@ -185,5 +185,5 @@ export async function inspectWrite(profiles: Profiles, explicit: string | undefi
   const outcome = await verify(ctx, record);
   if (!record.target) await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-048')!, { site: record.site }, ctx.api.contract!, ctx.peer);
   await journal.observe(outcome);
-  return { ...receipt(record, requestId), reconciliation: { outcome, readOnly: true } };
+  return { ...receipt({ ...record, outcome }, requestId), reconciliation: { outcome, readOnly: true } };
 }

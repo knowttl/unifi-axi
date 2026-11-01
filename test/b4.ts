@@ -125,12 +125,19 @@ export async function verifyB4(h: Harness) {
       let state: Record<string, unknown>[] = [neighbour];
       const sent: { method: string; path: string; body: unknown }[] = [];
       let lostAck = false;
+      let failAfterAck = false;
+      let failVerification = false;
       h.seed((request, response) => {
         assert.equal(request.headers['x-api-key'], h.syntheticKey);
         const url = new URL(request.url!, h.trusted.origin);
         if (url.pathname.endsWith('/info')) return { applicationVersion: version };
         const path = `/proxy/network/integration/v1/sites/${site}/networks`;
         if (request.method === 'GET') {
+          if (failVerification) {
+            failVerification = false;
+            response.statusCode = 400;
+            return {};
+          }
           if (url.pathname === path) return { offset: 0, limit: 25, count: state.length, totalCount: state.length, data: state };
           assert.equal(url.pathname, `${path}/${id}`);
           return state.find(row => row.id === id);
@@ -147,6 +154,7 @@ export async function verifyB4(h: Harness) {
             state = request.method === 'POST' ? [...state, row] : state.map(old => old.id === id ? row : old);
           }
           if (lostAck) { request.socket.destroy(); return; }
+          failVerification = failAfterAck;
           response.statusCode = request.method === 'POST' ? 201 : 200;
           response.end(request.method === 'DELETE' ? '' : JSON.stringify(state.find(row => row.id === id)));
         });
@@ -176,6 +184,25 @@ export async function verifyB4(h: Harness) {
         rows.push({ task: 'B4.1', acceptance: `AC-${operation.slice(3)}`, operation, version,
           variant, cases: [...variantCases[index]!, ['VAR-247', 'VAR-246', 'VAR-245'][index % 3]!, 'VAR-1029', 'VAR-1062'],
           status: 'passed', direction: 'preview-exact-request-state-and-no-replay' });
+      }
+      if (index === 0) {
+        const requested = { ...body, name: 'Pending verification' };
+        writeFileSync(bodyFile, JSON.stringify(requested));
+        const update = ['network', 'update', '--network-id', id, '--body-file', bodyFile];
+        const confirmation = (await run(update)).preview.confirmation;
+        const execute = [...update, '--execute', '--confirm', confirmation, '--request-id', `pending-update-${version}`];
+        const before = sent.length;
+        failAfterAck = true;
+        const accepted = await run(execute);
+        assert.equal(accepted.write.outcome, 'accepted');
+        failAfterAck = false;
+        const repeated = await run(execute);
+        assert.equal(repeated.write.auditId, accepted.write.auditId);
+        assert.equal(repeated.write.outcome, 'verified');
+        assert.deepEqual(repeated.reconciliation, { outcome: 'verified', readOnly: true });
+        assert.equal(sent.length, before + 1, 'An accepted update reconciles without another mutation');
+        assert.deepEqual(state, [neighbour, { ...requested, id, default: false, metadata: responseMetadata }]);
+        rows.push({ task: 'B4.1', operation: 'OP-052', version, status: 'passed', direction: 'accepted-update-replay-reconciliation' });
       }
       const remove = ['network', 'delete', '--network-id', id];
       const defaultConfirmation = (await run(remove)).preview.confirmation;

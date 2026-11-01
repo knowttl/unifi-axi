@@ -258,6 +258,10 @@ Set-Acl -LiteralPath $p -AclObject $acl
           configure, trusted, home, config, port, syntheticKey, task: writeTask,
           seed: handler => { requests = []; respond = handler; }, requests: () => requests,
         };
+        if (writeTask === 'all') {
+          const { verifyBodyless } = await import('./bodyless.ts');
+          inventoryRows.push(...await verifyBodyless(harness));
+        }
         if (writeTask === 'all' || writeTask.startsWith('B3.') || ['B4.0', 'B4.1'].includes(writeTask)) inventoryRows.push(...await verifyWrites({ ...harness, task: writeTask === 'all' || writeTask.startsWith('B4.') ? 'B3.3' : writeTask }));
         if (writeTask === 'all' || ['B4.0', 'B4.1'].includes(writeTask)) {
           const { verifyB4 } = await import('./b4.ts');

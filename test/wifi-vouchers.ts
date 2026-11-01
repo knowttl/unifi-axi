@@ -8,7 +8,7 @@ const site = '9361553d-e20d-45b8-a516-6948ab010011';
 const ids = [1, 2, 3, 4, 5].map(n => `8c850c83-1111-4111-8111-${String(n).padStart(12, '0')}`);
 const id = ids[0]!;
 const neighbourId = ids[4]!;
-const wifi = { name: 'Synthetic Wi-Fi', type: 'STANDARD', enabled: true, broadcastingFrequenciesGHz: [2.4, 5],
+export const wifi = { name: 'Synthetic Wi-Fi', type: 'STANDARD', enabled: true, broadcastingFrequenciesGHz: [2.4, 5],
   channel2gLockedTo6: false, clientIsolationEnabled: true, dtimPeriod2gLockedTo3: false, hideName: false,
   multicastToUnicastConversionEnabled: true, uapsdEnabled: true, advertiseDeviceName: false, arpProxyEnabled: true,
   bssTransitionEnabled: true, securityConfiguration: { type: 'WPA2_PERSONAL', passphrase: 'SYNTHETIC-WIFI-48291' } };

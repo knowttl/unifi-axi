@@ -1,302 +1,152 @@
 # unifi-axi
 
-An agent-facing CLI for the official UniFi Network Integration API.
-Package: `@knowttl/unifi-axi`.
+Agent-facing CLI for the official UniFi Network Integration API, read-only by default, with confirmed writes behind exact grants.
 
-B1.2a adds application version validation, site discovery, doctor and a configured live home to the protected profiles and verified HTTPS transport from B1.2.
-B1.3 adds an opt-in first-read proof through a reviewed, temporary local Artium fixture.
-Stock Artium remains unsupported.
-All 73 vendor operations are discoverable.
-`info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
-Read coverage includes [inventory and networks](#inventory-clients-networks-and-references) and [policies, vouchers, Wi-Fi and switching](#policies-vouchers-wi-fi-and-switching), subject to the documented contract gates.
-Network creation, update and deletion support [previews and explicitly granted execution](#network-write-foundation).
-[Firewall and ACL writes](#firewall-and-acl-writes) extend these controls to policies, zones, rules and ordering.
-Use `unifi-axi commands` for each operation's implementation status; unimplemented operations exit 1 with `NOT_IMPLEMENTED` before network access.
-Development verification uses local synthetic controllers only and performs no router reads or writes.
-All 32 live mutation probes remain unrun.
+[![npm](https://img.shields.io/npm/v/@knowttl/unifi-axi)](https://www.npmjs.com/package/@knowttl/unifi-axi)
+![Node](https://img.shields.io/badge/node-%3E%3D24.11.0-brightgreen)
 
-```text
-unifi-axi commands
-unifi-axi info --help
-unifi-axi site list --help
-unifi-axi auth status
-unifi-axi --version
-```
+[Why](#why-this-exists) | [Quickstart](#quickstart) | [Use with your agent](#use-with-your-agent) | [Commands](#commands) | [Safety](#safety) | [Configuration](#configuration) | [Output and exit codes](#output-and-exit-codes) | [Limitations](#limitations) | [Development](#development) | [Security](#security) | [License](#license)
 
-Output is TOON on stdout except for the bare version; errors use structured codes.
-`info` and `client list` retain the published `--full` switch; see [Application and sites](#application-and-sites) for text bounds.
-Unknown commands, unknown flags, duplicate flags and invalid scalar values exit 2.
-Bare `-v`, `-V` and `--version` print the package version before loading the catalogue.
-Without a profile the home view exits 1 with `PROFILE_REQUIRED` and setup guidance.
-`auth status` resolves protected references offline and reports only profile, origin and source.
-No profiles, an absent named profile, ambiguous selection and an unavailable key produce distinct `PROFILE_REQUIRED`, `PROFILE_NOT_FOUND`, `PROFILE_AMBIGUOUS` and `AUTH_REQUIRED` errors.
-See [Application and sites](#application-and-sites) for the configured home view.
-`doctor` resolves protected credentials, verifies TLS and reads application information only.
-Session setup is [explicit and directory-scoped](#optional-integrations).
+## Why this exists
 
-## Install
+Agents that manage a UniFi controller need bounded, structured answers and safe write paths, not raw vendor JSON.
+`unifi-axi` covers all 73 vendor operations of the Network Integration API and returns bounded TOON on stdout with structured error codes and next-step hints.
+Credentials are references only, TLS verification cannot be disabled, and every implemented write requires a preview, exact grants, a confirmation and a stable request ID.
 
-Use Node 24.11.0 or newer.
+## Quickstart
+
+Requires Node 24.11.0 or newer.
 
 ```sh
-npm install -g @knowttl/unifi-axi
+npm install --global @knowttl/unifi-axi
 unifi-axi --version
+unifi-axi
 ```
 
-The npm package is scoped; the executable is `unifi-axi`.
-
-## Application and sites
-
-Every implemented live command bootstraps from the actual Network `applicationVersion`, separately from any Site Manager label.
-Output identifies the actual application version, selected contract, verification status and native write-policy availability.
-Known versions 10.6.109 and 11.0.97 select their matching contract, regardless of a profile override.
-An unknown version returns `UNVERIFIED_API_VERSION` after the info read.
-A profile `apiContract` of 10.6.109 or 11.0.97 permits read-only investigation while output remains visibly `unverified` and retains the actual version.
-Application information is schema-validated only for known application versions; unknown versions require an object with a string `applicationVersion` but skip full info validation.
-Site responses are validated against the selected contract, including during unverified investigation.
-Unknown application versions cannot enable writes, even with an explicit read-only contract override.
-
-Running `unifi-axi` with a configured profile returns application and Site Manager versions and at most 25 sites, each with its ID, internal reference and name.
-The result includes the vendor total, truncation metadata and commands that retain profile and site context.
-Use `site list` for the full site listing within the enumeration budgets below.
-Live read output bounds long text to 1,000 characters plus an ellipsis, with original sizes and a `--full` command; full text still redacts secrets and does not expand the home view's site limit.
-
-`site list` enumerates pages and reports exact site UUIDs, internal references, names, returned `count`, `totalCount`, starting `offset` and `complete`.
-It accepts the official `--offset`, `--limit` and `--filter` query flags.
-The default limit is 25 per request; `--limit 0` reads metadata only and reports incomplete when rows remain.
-Enumeration is bounded to 100 pages, 10,000 rows, eight MiB across responses and thirty seconds.
-Repeated records, stalled offsets, changing totals, counts exceeding requested or reported bounds, or exhausted budgets fail with `READ_INCOMPLETE`, including progress and filter guidance.
-Malformed JSON, missing fields and wrong types fail with `RESPONSE_INVALID`.
-An empty result at or beyond `totalCount` reports `count: 0` and `complete: true`, preserving the requested `offset` and upstream `totalCount`.
-
-Select a site with `--site <site-id>`, then the profile's `siteId`, then the sole discovered site.
-Site discovery works without selection; without an explicit or profile selection, home reports `SITE_AMBIGUOUS` for multiple sites and `SITE_REQUIRED` when no sites exist.
-An explicit selection survives contextual hints along with the selected file profile and explicit configuration path.
-Inventory reads use the selected site for every resource request.
+Without a profile the home view exits 1 with setup guidance:
 
 ```text
+error:
+  code: PROFILE_REQUIRED
+  message: Select a profile with --profile or configure a complete environment profile.
+help[3]: unifi-axi auth status,unifi-axi profile configure --profile <name> --file <absolute-profile-json>,unifi-axi site list
+```
+
+Configure a profile from a protected JSON file of references (see [Configuration](#configuration)), then make the first authenticated reads:
+
+```sh
+unifi-axi profile configure --profile lab --file /absolute/path/profile.json
+unifi-axi auth status --profile lab
 unifi-axi doctor --profile lab
 unifi-axi site list --profile lab
 unifi-axi --profile lab --site <site-id>
 ```
 
-## Optional integrations
+`auth status` resolves references offline.
+`doctor` resolves credentials, verifies TLS and reads application information only.
+The home view returns application and Site Manager versions plus at most 25 sites.
 
-For optional ambient session context, preview an explicit directory-scoped integration:
+## Use with your agent
 
-```sh
-unifi-axi setup --app claude --directory /absolute/project --profile lab
-unifi-axi setup --app claude --directory /absolute/project --profile lab --execute --confirm <digest>
-```
+Two optional discovery paths ship; either one is sufficient, and normal read commands install nothing.
 
-Choose `claude`, `codex` or `opencode`.
-Setup binds the named file-backed profile and configuration path to that directory, preserves unrelated settings and repairs its managed integration.
-Repeat setup for a successful no-op.
-Claude uses `.claude/settings.json`, Codex uses `.codex/hooks.json`, and OpenCode uses `.opencode/plugins/unifi-axi.ts` within the selected directory.
-Codex setup also enables project hooks in `.codex/config.toml`.
-The hook or plugin emits context only when the working directory matches the selected directory.
-Hosted execution denies setup before any filesystem changes.
-Normal read commands install no integrations.
-Alternatively, install the generated static skill exported at `@knowttl/unifi-axi/skill` for on-demand discovery without session hooks.
-The hook and skill are two optional discovery paths; either one is sufficient.
+- Session hook: preview, then install a directory-scoped integration for `claude`, `codex` or `opencode`.
 
-## Inventory, clients, networks and references
+  ```sh
+  unifi-axi setup --app claude --directory /absolute/project --profile lab
+  unifi-axi setup --app claude --directory /absolute/project --profile lab --execute --confirm <digest>
+  ```
 
-`country list`, `dpi application list`, `dpi category list`, `device pending list`, `device-tag list`, `radius profile list`, `vpn server list`, `vpn site-to-site-tunnel list` and `wan list` enumerate the documented supporting records.
-`device list`, `client list` and `network list` enumerate inventory for the selected site.
-These lists use the same bounded paging and completeness metadata as `site list`.
-Filters are forwarded unchanged where the documented operation accepts them; WAN does not accept a filter.
-Country codes and numeric DPI IDs keep their original types.
-WAN and VPN output contains documented overview fields only.
-VPN `metadata.source` is returned only for `DERIVED` site-to-site tunnels.
-Missing totals or invalid page shapes fail with `RESPONSE_INVALID` instead of claiming completeness.
+  Setup binds the named file-backed profile and configuration path to that directory, preserves unrelated settings, repairs its managed integration and is a no-op when repeated.
+  Claude uses `.claude/settings.json`, Codex uses `.codex/hooks.json` (and enables project hooks in `.codex/config.toml`), and OpenCode uses `.opencode/plugins/unifi-axi.ts`.
+  The hook emits context only when the working directory matches the selected directory.
+- Static skill: the generated skill is exported at `@knowttl/unifi-axi/skill` for on-demand discovery without hooks.
 
-`device show --device-id <id>`, `device statistics latest --device-id <id>`, `client show --client-id <id>` and `network show --network-id <id>` address the exact selected resource.
-Required resource IDs are checked before credentials or network access.
-An upstream missing or cross-site resource returns `UPSTREAM_ERROR`; no similar resource is substituted.
-`network references --network-id <id>` includes the selected network's ID and name and the complete documented reference response.
+## Commands
 
-```text
-unifi-axi device list --site <site-id>
-unifi-axi client show --site <site-id> --client-id <client-id>
-unifi-axi network references --site <site-id> --network-id <network-id>
-```
+Run `unifi-axi commands` for the offline catalogue with each operation's id, effect and status.
+Run `unifi-axi <command> --help` for flags, defaults and effects.
+Global flags: `--help`, `--config <absolute-path>`, `--profile <name>`, `--site <site-id>`, `--full`.
 
-Responses preserve gateway, switch and unmanaged network fields and validate their selected subtype.
-Response-side NORM-001 accepts omitted or explicit null `dhcpGuarding` as disabled, preserving null in output.
-Other null fields must satisfy the original schema.
-See [Network write foundation](#network-write-foundation) for request-side NORM-001 support.
-Validation failures include the offending field path without echoing its value.
-The approved 10.6.109 PoE resolution preserves integer values without coercion and rejects strings.
-All 11.0.97 device reads remain blocked with `CONTRACT_CONFLICT` for unresolved CF-007; its integer type and string enum disagree, and no 11.0.97 override is approved.
-
-## Policies, vouchers, Wi-Fi and switching
-
-`acl-rule`, `dns policy`, `traffic-list`, `firewall zone`, `hotspot voucher`, `switching lag`, `switching mc-lag-domain` and `switching switch-stack` provide `list` and `show` reads.
-Use each command's `--help` for its required resource ID flag.
-Lists preserve the vendor order, filters and bounded paging metadata.
-Details preserve nested subtype fields and verify the returned ID against the requested resource.
-Empty switching lists remain empty; missing details return an explicit upstream error.
-
-`acl-rule order show` returns the ordered rule IDs.
-`firewall policy order show` requires both `--source-firewall-zone-id` and `--destination-firewall-zone-id` and returns ordering for that zone pair.
-Zone details include their network IDs.
-Firewall policy reads accept upper- or lowercase named protocols through the reviewed version-specific resolution for CF-002/CF-003/CF-004 and CF-008/CF-009/CF-010.
-Unknown named protocols return `CONTRACT_CONFLICT`.
-Wi-Fi broadcast `show` validates radio rates using the reviewed exact-field numeric enum resolutions CF-005/CF-006 and CF-011/CF-012 respectively.
-`wifi broadcast list`, policy ordering and zone reads remain available.
-No source conflict is silently normalized.
-
-`hotspot voucher list/show` and `wifi broadcast list/show` accept `--secret-output <absolute-path>` for standalone protected response export.
-Exports default off and require `"allowSecretExport": true` in the selected file profile as well as the explicit output flag.
-Without that standing profile opt-in, `SECRET_EXPORT_DENIED` names `allowSecretExport` and refuses before credential resolution, vendor access or file reservation.
-`UNIFI_AXI_READ_ONLY` continues to govern native mutations; it does not replace or change the separate export opt-in.
-The destination must be new and inside an existing private directory owned by the current user with no group or other permissions on Linux; exported files use mode 0600.
-Windows verifies the directory's protected ACL and restricts and verifies the new file's ACL using the rules in [Credentials and transport](#credentials-and-transport).
-The file contains JSON entries with a resource ID, an allowlisted response path and its secret value.
-Voucher codes and personal Wi-Fi passphrases, including WPA2 personal preshared keys, are the only exported values.
-Wi-Fi list exports fetch the documented detail for each listed ID.
-Authentication keys remain redacted even at an allowlisted location.
-Ordinary output contains IDs and a delivery receipt only.
-An existing destination is never replaced, and a failed read removes the reserved file so the read can be repeated with a new destination.
-Hosted execution refuses local exports before resolving a profile or contacting the vendor.
-See [Wi-Fi broadcasts and vouchers](#wi-fi-broadcasts-and-vouchers) for mutation-time secret delivery and recovery.
-
-Voucher `code` fields and Wi-Fi `passphrase` fields are replaced with `[REDACTED]` in default output.
-Diagnostic `error.code` fields remain visible.
-Voucher lists use the documented default limit of 100; other lists use their documented defaults.
-
-## Network write foundation
-
-`network create --body-file <path>` previews network creation.
-`network update --network-id <id> --body-file <path>` previews a complete replacement using PUT.
-Request body files must satisfy the private secret-file checks in [Credentials and transport](#credentials-and-transport), including for previews.
-Both support the selected contract's `GATEWAY`, `SWITCH` and `UNMANAGED` variants, including nested DHCP, IPv6 and NAT settings.
-Requests reject undeclared fields, unmapped tags and missing required subtype fields.
-Optional `dhcpGuarding` accepts omission, a schema-valid configuration or explicit null to disable it under NORM-001.
-`network delete --network-id <id>` previews deletion of that exact network.
-Omitted `--force` and `--force false` normalize to the same request; `--force true` needs a new preview.
-Request site and network UUIDs normalize to lowercase before binding and dispatch; resource identity comparisons ignore UUID letter case.
-All three commands select a site through `--site`, the profile or unambiguous discovery.
-
-Execution requires `writes.allowWrites: true` and exact vendor grants in `writes.operations`: `createNetwork` plus `createNetwork:<management>` for creation, `updateNetwork` plus `updateNetwork:<management>` for update, or `deleteNetwork` for deletion.
-Legacy `OP-049`/`OP-050` entries are readable profile syntax but do not authorize execution.
-`UNIFI_AXI_READ_ONLY=true` or `1` overrides all grants.
-Repeat the previewed command with `--execute --confirm <confirmation> --request-id <stable-id>`.
-Confirmation binds the complete normalized method, resolved path, query defaults, body, target set, selected resource state, origin, profile/config identity, credential reference and value hash, application version, contract hash, TLS leaf and connection route.
-Secret values are hashed internally and redacted from output.
-Identity, body input, grants and selected state are reread before dispatch, and changed bindings fail closed.
-Every write-related read, including site discovery, selected-state checks and recovery, enforces the TLS leaf and connection address captured by its initial application read before sending credentials.
-The vendor provides no atomic conditional write, so concurrent changes can still occur after that final read.
-
-Linux stores owner-only request claims under `$XDG_STATE_HOME/unifi-axi/writes.log/`, or the runtime home under `.local/state/unifi-axi/writes.log/`.
-`UNIFI_AXI_WRITE_LOG` selects an absolute private journal directory.
-Each configuration/profile namespace owns its request IDs durably.
-The journal contains hashes, audit IDs, resource IDs and outcomes, never request bodies or keys.
-An exclusive claim and synced intent precede dispatch; a synced `unknown` record precedes any possible send.
-Mutations are never retried by transport.
-Reusing an owned ID runs the read-only reconciliation described below and reports the reconciled outcome without resending the mutation; changing its request or identity fails.
-Empty, truncated or corrupt claims fail closed and never expire into retry permission.
-
-`write show --request-id <id>` reports the stored intent for the selected identity.
-`write reconcile --request-id <id>` uses documented reads and records a separate observation without replacing ownership.
-A verified acknowledgement plus its exact returned ID can establish the created resource through a subsequent read.
-A lost acknowledgement stays `unknown`; finding a similar resource cannot prove that creation succeeded.
-An independently read absent deletion target returns `no-op` without sending a mutation.
-Receipts distinguish `not-sent`, `unknown`, `accepted`, `verified` and `no-op`, with an audit ID for recovery.
-Keep the same profile/configuration and journal location across invocations.
-Native Windows writes remain gated until directory durability is proven.
-The Artium read fixture has no cross-invocation write custody, so hosted mutations remain denied before vendor access.
-
-## Firewall and ACL writes
-
-`firewall policy` supports `create`, `update`, `patch`, `delete` and `order set`.
-`firewall zone` supports `create`, `update` and `delete`.
-`acl-rule` supports `create`, `update`, `delete` and `order set`.
-These commands share the preview, confirmation, durable request ID and recovery controls described above.
-Use `--body-file <path>` for creates, replacements, patches and ordering; bodies follow the observed application's shipped contract.
-`update` replaces the selected resource rather than merging fields.
-Replacement verification includes omitted optional fields and selected-contract defaults, so retained filters or incorrect defaults leave the receipt `accepted` rather than `verified`.
-Policy `patch` changes logging settings and, on 11.0.97, flow reporting.
-Patch verification compares only submitted fields; policy create and replacement verification also check the selected contract's documented flow-reporting default when omitted.
-Named protocol names are emitted in lowercase on writes.
-Source and destination zone selectors are required for policy ordering and are bound into confirmation and recovery.
-Delete and replacement commands require the corresponding resource ID flag shown by `--help`.
-
-Grant each operation independently with its exact vendor name in `writes.operations`:
-
-| Family | Grants |
+| Group | Commands |
 |---|---|
-| Firewall policy | `createFirewallPolicy`, `updateFirewallPolicy`, `patchFirewallPolicy`, `deleteFirewallPolicy`, `updateFirewallPolicyOrdering` |
-| Firewall zone | `createFirewallZone`, `updateFirewallZone`, `deleteFirewallZone` |
-| ACL rule | `createAclRule`, `updateAclRule`, `deleteAclRule`, `updateAclRuleOrdering` |
+| Local | `commands`, `doctor`, `auth status`, `profile list`, `profile configure`, `config path`, `setup`, `--version` |
+| Application and sites | `info`, `site list` |
+| Inventory | `device list/show/pending list/adopt/remove/action`, `device statistics latest`, `device interfaces ports action`, `device-tag list`, `client list/show/action`, `network list/show/references`, `country list`, `dpi application list`, `dpi category list`, `radius profile list`, `vpn server list`, `vpn site-to-site-tunnel list`, `wan list` |
+| Policies | `firewall policy list/show/create/update/patch/delete/order show/order set`, `firewall zone list/show/create/update/delete`, `acl-rule list/show/create/update/delete/order show/order set`, `dns policy list/show/create/update/delete`, `traffic-list list/show/create/update/delete` |
+| Wi-Fi and guests | `wifi broadcast list/show/create/update/delete`, `hotspot voucher list/show/create/delete/delete-many` |
+| Switching | `switching lag`, `switching mc-lag-domain`, `switching switch-stack` (each `list` and `show`) |
+| Networks | `network create`, `network update`, `network delete` |
+| Write recovery | `write show --request-id <id>`, `write reconcile --request-id <id>` |
 
-All grants also require `writes.allowWrites: true` and remain subject to the read-only override.
-Ordering receipts verify the final sequence through the documented ordering read.
-Ordering bodies must retain exactly the selected IDs without duplicates.
+Unimplemented operations exit 1 with `NOT_IMPLEMENTED` before network access.
+At the current head every catalogue entry reports `implemented`.
 
-## DNS policies and traffic matching lists
+Reading notes:
 
-`dns policy` supports `create`, `update` and `delete`, with exact grants `createDnsPolicy`, `updateDnsPolicy` and `deleteDnsPolicy`.
-`traffic-list` supports the same actions with grants `createTrafficMatchingList`, `updateTrafficMatchingList` and `deleteTrafficMatchingList`.
-Both families use the shared write controls, protected `--body-file` input and stable request IDs described above.
-Updates replace the selected resource; deletes require `--dns-policy-id` or `--traffic-matching-list-id`.
-DNS bodies support `A_RECORD`, `AAAA_RECORD`, `CNAME_RECORD`, `FORWARD_DOMAIN`, `MX_RECORD`, `SRV_RECORD` and `TXT_RECORD`.
-Traffic lists support `IPV4_ADDRESSES`, `IPV6_ADDRESSES` and `PORTS`, with the entry types and fields declared by the selected contract.
-Unknown fields, missing required values and invalid nested entry tags fail before mutation.
-Traffic-list creates and updates also reject invalid or mismatched address families, invalid CIDR prefixes and reversed address or port ranges before preview or dispatch.
-Invalid entries return `INVALID_ARGUMENT` without sending a mutation.
+- Lists use bounded paging and report `count`, `totalCount`, `offset` and `complete`, and accept `--offset`, `--limit` and `--filter` where the operation documents them.
+  The default limit is 25 per request, `--limit 0` reads metadata only, and voucher lists default to 100.
+- Enumeration is bounded to 100 pages, 10,000 rows, eight MiB across responses and thirty seconds, then fails with `READ_INCOMPLETE` and guidance.
+- Details verify the returned ID against the requested resource and never substitute a similar resource.
+- Select a site with `--site <site-id>`, then the profile `siteId`, then the sole discovered site.
+  Otherwise the home view reports `SITE_AMBIGUOUS` or `SITE_REQUIRED`.
+- Every live command bootstraps from the actual Network `applicationVersion`.
+  Versions 10.6.109 and 11.0.97 select their matching contract.
+  An unknown version returns `UNVERIFIED_API_VERSION`.
+  A profile `apiContract` of one of those versions permits read-only investigation that stays visibly `unverified`, and never enables writes.
+- Long text is bounded to 1,000 characters plus an ellipsis; `--full` on `info` and `client list` shows more, still redacted.
 
-## Wi-Fi broadcasts and vouchers
+Write commands follow the same preview, confirm and recover pattern, take `--body-file <path>` where a body is needed, and are described in [Safety](#safety).
+Pass `--secret-output <absolute-path>` to `hotspot voucher` and `wifi broadcast` reads and creates for protected secret export.
 
-`wifi broadcast` supports `create`, `update` and `delete` with grants `createWifiBroadcast`, `updateWifiBroadcast` and `deleteWifiBroadcast`.
-`hotspot voucher` supports `create`, `delete` and `delete-many` with grants `createVouchers`, `deleteVoucher` and `deleteVouchers`.
-All use the shared preview, confirmation, write policy and durable request ID controls.
-Creates and Wi-Fi replacements accept a protected `--body-file` matching the selected contract.
-Wi-Fi replacements verify optional settings as well as submitted fields.
-Unresolved basic-rate schema values are refused.
-Voucher generation defaults to one voucher when `count` is omitted; receipts retain the complete returned batch of IDs.
-Bulk deletion requires `--filter`, previews the matching IDs, refuses detected drift, and combines the predicate with exactly the approved sorted ID set.
-A matching voucher created after the final read is outside that set and survives.
-The outgoing predicate uses the vendor's `and(originalPredicate,id.in(...))` [compound filter syntax](https://developer.ui.com/network/v10.6.106/filtering).
-An empty set sends no DELETE.
-Deletion filter text is withheld from receipts and journals because it may contain a voucher code.
+## Safety
 
-Creation and Wi-Fi replacement can also accept `--secret-output <absolute-file>` when the selected profile sets `allowSecretExport: true`.
-Both gates are required; exports remain unavailable in hosted execution.
-The destination must be a new file in an existing private directory and is reserved before any mutation.
-Only allowlisted codes or passphrases reach that protected file; ordinary output stays redacted.
-A delivery failure preserves the vendor outcome and reports `delivery.delivered: false` separately.
-Repeat the exact owned request with its original confirmation, request ID and output path to recover the complete batch through reads without generating again.
-Alternatively, use `write reconcile --request-id <id>` to inspect ownership, then export each stored ID through `hotspot voucher show --voucher-id <id> --secret-output <new-file>` or `wifi broadcast show --wifi-broadcast-id <id> --secret-output <new-file>`.
-Never issue a new generation request to recover an existing code.
+- Reads are the default.
+  `UNIFI_AXI_READ_ONLY=true` or `1` overrides every write grant.
+  It accepts only `1`, `0`, `true` or `false`, case-insensitively.
+- Execution needs `writes.allowWrites: true` and the exact vendor grant in `writes.operations`.
+  Some operations also need a qualified grant, for example `createNetwork:<management>` or `executeConnectedClientAction:<action>`.
+  Legacy `OP-049` and `OP-050` entries are readable profile syntax but do not authorize execution.
+- Each write is previewed first.
+  Repeat the command with `--execute --confirm <confirmation> --request-id <stable-id>`.
+  The confirmation binds the normalized request, resolved path, body, target set, selected resource state, origin, profile, credential reference, application version, contract hash, TLS leaf and connection route.
+  Changed bindings fail closed, and `update` commands replace the resource rather than merge.
+- Write grants by family:
 
-## Guest access and device actions
+  | Family | Grants |
+  |---|---|
+  | Network | `createNetwork`, `updateNetwork`, `deleteNetwork` |
+  | Firewall policy | `createFirewallPolicy`, `updateFirewallPolicy`, `patchFirewallPolicy`, `deleteFirewallPolicy`, `updateFirewallPolicyOrdering` |
+  | Firewall zone | `createFirewallZone`, `updateFirewallZone`, `deleteFirewallZone` |
+  | ACL rule | `createAclRule`, `updateAclRule`, `deleteAclRule`, `updateAclRuleOrdering` |
+  | DNS policy | `createDnsPolicy`, `updateDnsPolicy`, `deleteDnsPolicy` |
+  | Traffic list | `createTrafficMatchingList`, `updateTrafficMatchingList`, `deleteTrafficMatchingList` |
+  | Wi-Fi broadcast | `createWifiBroadcast`, `updateWifiBroadcast`, `deleteWifiBroadcast` |
+  | Hotspot voucher | `createVouchers`, `deleteVoucher`, `deleteVouchers` |
+  | Clients and devices | `executeConnectedClientAction`, `adoptDevice`, `removeDevice`, `executeAdoptedDeviceAction`, `executePortAction` |
 
-`client action --client-id <uuid>` accepts `AUTHORIZE_GUEST_ACCESS` and `UNAUTHORIZE_GUEST_ACCESS` in a protected `--body-file`.
-Authorization accepts the contract's optional time, data quota and upload/download limits.
-Guest confirmations exclude `access.authorization.usage` counters from the selected client state; authorization changes still invalidate confirmation at execution or final dispatch.
-Grant `executeConnectedClientAction` plus `executeConnectedClientAction:<action>` separately for each action.
-`device adopt` accepts `macAddress` and `ignoreDeviceLimit` in its body and requires `adoptDevice`.
-Its confirmation includes the matching pending and adopted device state, and its receipt retains the returned device UUID.
-Device writes require device-state reads and inherit their [version-specific contract gates](#inventory-clients-networks-and-references).
-`device remove --device-id <uuid>` requires `removeDevice`.
-`device action` with `RESTART` requires `executeAdoptedDeviceAction` plus `executeAdoptedDeviceAction:RESTART`.
-`device interfaces ports action --device-id <uuid> --port-idx <integer>` with `POWER_CYCLE` requires `executePortAction` plus `executePortAction:POWER_CYCLE`.
-All use the shared preview, exact confirmation, write policy and durable request ID controls.
-Restart and PoE actions accept bodyless HTTP 200 acknowledgements.
-Action receipts remain `accepted` because resource reads cannot prove action completion; ambiguous outcomes remain `unknown` and are never resent.
-These operations are tested only against synthetic controllers; disruptive live actions require separate authorization.
+- Unknown outcomes are never retried.
+  An exclusive claim and a synced intent precede dispatch, and a synced `unknown` record precedes any possible send.
+  Reusing an owned request ID runs read-only reconciliation instead of resending.
+  `write reconcile` records a separate observation; receipts distinguish `not-sent`, `unknown`, `accepted`, `verified` and `no-op`, with an audit ID.
+  A lost acknowledgement stays `unknown`, and a similar resource never proves creation.
+- The write journal lives under `$XDG_STATE_HOME/unifi-axi/writes.log/` (or `.local/state/unifi-axi/writes.log/` under the home directory) with owner-only access, or under the absolute directory in `UNIFI_AXI_WRITE_LOG`.
+  It stores hashes, audit IDs, resource IDs and outcomes, never request bodies or keys.
+  Keep the same profile, configuration and journal location across invocations.
+- Secrets are redacted: voucher `code` and Wi-Fi `passphrase` appear as `[REDACTED]`, and keys are redacted in raw, JSON-escaped and URL-encoded forms.
+  Export of voucher codes and personal Wi-Fi passphrases requires both `--secret-output <absolute-path>` and `"allowSecretExport": true` in the selected file profile.
+  The destination must be a new file in an existing private directory, and exported files use mode 0600.
+  Without the profile opt-in, `SECRET_EXPORT_DENIED` refuses before any credential or vendor access.
+  Never issue a new generation request to recover an existing code; use `write reconcile` and re-export with `show --secret-output`.
+- `hotspot voucher delete-many` requires `--filter`, previews the matching IDs and deletes exactly the approved ID set.
+- Request bodies are validated against the selected contract and reject undeclared fields before any mutation.
+- Disruptive actions (restart, PoE power cycle, guest authorization) are accepted, not proven complete: receipts stay `accepted`.
 
-## Credentials and transport
+## Configuration
 
-Use `config path` to find configuration and `profile list` to list its profiles.
-Choose configuration with `--config`, then `UNIFI_AXI_CONFIG`, then the platform default.
-Linux uses an absolute `XDG_CONFIG_HOME` or the runtime home directory under `.config/unifi-axi/config.json`.
-Windows uses `APPDATA\unifi-axi\config.json` and protected ACLs.
-Profiles are selected by `--profile`, `UNIFI_AXI_PROFILE`, complete environment profile, default profile, then sole profile.
-An explicit file profile ignores competing environment profile fields.
-A partial environment profile fails with `CONFIG_INVALID`.
+Configuration file: `--config`, then `UNIFI_AXI_CONFIG`, then `$XDG_CONFIG_HOME/unifi-axi/config.json` (or `.config/unifi-axi/config.json` under the home directory).
+Use `unifi-axi config path` to find it and `unifi-axi profile list` to list profiles.
+Profile selection: `--profile`, `UNIFI_AXI_PROFILE`, a complete environment profile, the default profile, then the sole profile.
 
 ```json
 {
@@ -311,149 +161,69 @@ A partial environment profile fails with `CONFIG_INVALID`.
 }
 ```
 
-`apiKey` accepts exactly one environment or absolute local file reference.
-Omitting `apiKey` defaults to the `UNIFI_AXI_API_KEY` environment reference.
-An environment profile requires `UNIFI_AXI_ORIGIN` and `UNIFI_AXI_API_KEY`; optional fields are `UNIFI_AXI_SITE_ID`, `UNIFI_AXI_API_CONTRACT`, `UNIFI_AXI_TLS` and `UNIFI_AXI_WRITES`.
-The last two contain strict JSON objects.
-`UNIFI_AXI_READ_ONLY` accepts only `1`, `0`, `true` or `false`, case-insensitively.
-See [Network write foundation](#network-write-foundation) for execution grants and journal custody.
-Inline secret values and secret flags are refused.
-File keys lose a leading BOM and trailing whitespace.
-Linux checks ownership and permissions before reading; secret files require owner-only permissions and configs cannot be group- or world-writable.
-Windows refuses UNC/device secret references and reparse points.
-On Windows, every config, configure-input and secret-file read verifies current-user ownership and a protected ACL with explicit FullControl grants only to the current user, SYSTEM and Administrators, requiring all three.
-Unsafe files fail with `CONFIG_INSECURE` before any authenticated HTTP request.
-No credential store or token cache is created.
+- `apiKey` takes exactly one environment or absolute local file reference, and defaults to `UNIFI_AXI_API_KEY`.
+  Inline secrets and secret flags are refused.
+- An environment profile needs `UNIFI_AXI_ORIGIN` and `UNIFI_AXI_API_KEY`.
+  Optional: `UNIFI_AXI_SITE_ID`, `UNIFI_AXI_API_CONTRACT`, `UNIFI_AXI_TLS` and `UNIFI_AXI_WRITES` (the last two are strict JSON objects).
+  A partial environment profile fails with `CONFIG_INVALID`.
+- Other variables: `UNIFI_AXI_CONFIG`, `UNIFI_AXI_PROFILE`, `UNIFI_AXI_READ_ONLY`, `UNIFI_AXI_WRITE_LOG`.
+- Secret and config files must be owner-only and configs cannot be group- or world-writable; unsafe files fail with `CONFIG_INSECURE` before any authenticated request.
+  No credential store or token cache is created.
+- TLS uses system trust and hostname verification.
+  An appliance profile may set `tls.trustedCertificatePem` and `tls.peerFingerprintSha256` together, plus an optional IP `tls.connectAddress` that changes only the TCP destination.
+  Certificate failures return `TLS_REJECTED` without retrying or sending credentials.
+- The credential schema ships as `dist/axi-credential.schema.json` with `apiKey` marked `x-secret`.
+- Metadata exports: `./catalogue`, `./capabilities`, `./skill` and `./credential-schema`.
 
-To configure a profile, put one profile object containing references in a protected JSON file, then run:
+## Output and exit codes
 
-```text
-unifi-axi profile configure --profile lab --file /absolute/path/profile.json
-unifi-axi auth status --profile lab
-```
+- Output is TOON on stdout, except `-v`, `-V` and `--version`, which print the bare package version.
+- Errors use structured codes, for example `PROFILE_REQUIRED`, `PROFILE_NOT_FOUND`, `PROFILE_AMBIGUOUS`, `AUTH_REQUIRED`, `RESPONSE_INVALID`, `READ_INCOMPLETE`, `TIMEOUT`, `UPSTREAM_ERROR`, `CONTRACT_CONFLICT`, `INVALID_ARGUMENT` and `NOT_IMPLEMENTED`.
+- Exit code 0 is success, 1 is a command error, and 2 is a usage error such as an unknown command, unknown flag, duplicate flag or invalid scalar value.
+- Each API request has a ten-second deadline, at most two reads run concurrently, and each response is bounded to one MiB.
+- Reads retry transport failures and HTTP 502, 503 and 504 at most twice within the deadline.
+  HTTP 401 is never retried, 429 retries only with an exact `Retry-After` of 0, 1 or 2 seconds, and redirects are refused.
+  Mutations are never retried by transport.
 
-The config writer uses exclusive private temporary files, fsync and same-directory rename.
-Windows writes restrict ACLs to the current user, SYSTEM and Administrators and retry transient rename failures for about one second.
-Unknown top-level and nested fields are refused.
+## Limitations
 
-Default TLS uses system trust and hostname verification.
-An appliance profile may specify `tls.trustedCertificatePem` and `tls.peerFingerprintSha256` together, plus an optional IP `tls.connectAddress`.
-The fingerprint is 64 hexadecimal characters for the exact public certificate.
-Private key PEM, mismatched fingerprints and unknown TLS options are refused.
-The route changes only the TCP destination; the origin remains the TLS name and HTTP Host.
-Chain, validity, hostname and peer pin checks finish before any authenticated HTTP request.
-There is no TLS bypass flag.
-Each API request has a ten-second deadline across queueing, TLS establishment, retries and HTTP response consumption.
-At most two reads run concurrently per process.
-Reads retry transport failures and HTTP 502/503/504 at most twice with a 100 ms delay, within that same deadline.
-Before TLS completes, transient connection failures (`ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, `EPIPE` and socket hang-up) are eligible for those retries.
-Certificate chain, validity, hostname and peer pin rejections fail with `TLS_REJECTED` without retrying or sending an authenticated request.
-HTTP 401 is never retried.
-Reads receiving HTTP 429 retry only with an exact Retry-After delta of 0, 1 or 2 seconds that fits the remaining deadline.
-Redirects are refused without sending credentials to the destination.
-Each API response is bounded to one MiB and sensitive fields and raw, JSON-escaped and URL-encoded key forms are redacted.
-Response byte-budget failures return `READ_INCOMPLETE`; request deadline failures return `TIMEOUT`, which paginated list enumeration converts to `READ_INCOMPLETE` with progress guidance.
+- The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
+  Other versions are read-only and unverified.
+- Known vendor contract conflicts are blocked rather than normalized, for example all 11.0.97 device reads fail with `CONTRACT_CONFLICT` (CF-007), and unknown named firewall protocols are refused.
+  The conflict registry is `src/contract-conflicts.json` and the reviewed resolutions are in `src/normalization-ledger.json`.
+- WAN, VPN and RADIUS changes, UniFi OS backup and restore, firmware upgrades and administrator management are absent from the vendor contracts.
+  SSH and undocumented endpoints are excluded.
+- The vendor offers no atomic conditional write, so concurrent changes can still occur after the final pre-dispatch read.
+- All 32 live mutation probes remain unrun.
+  Verification uses local synthetic controllers only and performs no router reads or writes.
+- Native Windows ACL, install and write behavior is pending, and native Windows writes remain gated until directory durability is proven.
+  Linux results cannot establish Windows behavior.
+- Hosted execution denies setup, local secret export and mutations.
+- Stock Artium remains unsupported; the opt-in first-read proof uses a reviewed, temporary local fixture.
 
-The catalogue covers the captured 10.6.109 and 11.0.97 contracts.
-WAN, VPN and RADIUS changes, UniFi OS backup/restore, firmware upgrades and administrator management are absent from those contracts.
-SSH and undocumented endpoints are excluded.
+## Development
 
-For metadata consumers, the package exports `./catalogue`, `./capabilities`, `./skill` and `./credential-schema`.
-The command mapping in `src/commands.json` owns command names and their official operation IDs.
-The catalogue derives effects and both versions' parameter, request and response contracts from the [retained OpenAPI sources](evidence/README.md).
-The build generates capability metadata and static skill guidance from it.
-The credential schema ships as `dist/axi-credential.schema.json` with `apiKey` marked `x-secret`.
+Use Node 24.14.0 and pnpm 10.34.6, as pinned in this checkout.
+There are no install hooks or telemetry.
 
-## Versioned validation
-
-The validation compiler checks the retained source hashes and compiles each version independently without changing its source.
-It supports the validation keywords present in those contracts and rejects unsupported keywords.
-Discriminator dispatch follows the recorded interpretation in [the normalization ledger](src/normalization-ledger.json).
-Required fields and additional-property rules retain their recorded meaning.
-Nullability follows the source schema except at the exact request and response fields approved in the normalization ledger.
-UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI formats remain annotations.
-
-[The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations and contract cases.
-The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
-Unresolved structural conflicts block operations whose response schemas reach the conflicting field, with the retained device-family exception described in [Inventory, clients, networks and references](#inventory-clients-networks-and-references).
-Application and site validation remain available.
-The normalization ledger owns the reviewed PoE, named-protocol and Wi-Fi radio-rate enum resolutions and request/response NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
-
-## Development and verification
-
-Use Node 24.14.0 and pnpm 10.34.6, pinned in this checkout.
-The package engine floor is Node 24.11.0, matching the approved integration baseline.
-TypeScript 5.9.3 and TOON 2.3.1 follow the inspected foundation precedent.
-ESLint 9.39.1, typescript-eslint 8.46.3 and Node types 24.10.0 are exact build pins; pnpm-lock.yaml fixes the transitive graph.
-There are no install hooks, telemetry or vendor connections.
-The release workflow uses pnpm to install dependencies and run `pnpm check` before publishing a tagged release through npm OIDC trusted publishing.
-Configure the npm trusted publisher for `knowttl/unifi-axi` and `.github/workflows/release-please.yml` before releasing.
-
-```text
+```sh
 pnpm install --frozen-lockfile
+pnpm build
 pnpm check
-pnpm verify:packaged -- --task B1.1
-pnpm verify:packaged -- --task B1.2
-pnpm verify:packaged -- --task B1.2a
-pnpm verify:packaged -- --task B2.0
-pnpm verify:packaged -- --task B4.7
-pnpm verify:packaged -- --task B4.8
-pnpm verify:packaged -- --task B4.9
-pnpm verify:packaged -- --task B4.10
-pnpm verify:contracts -- --task B2.1
 ```
 
-`pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
-The opt-in Artium proof runs separately with `pnpm verify:artium`, extending B1.3 read coverage with write-admission and local secret-export denials and reporting task `B3.3`.
-The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
-That command prints an explicit skip reason when no Artium host fixture is selected.
-The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
-Packaged verification installs dependencies offline and requires a pre-seeded pnpm store.
-It compares command outcomes with an independent manifest-derived expectation fixture and validates exported metadata against both retained official contracts.
-Offline discovery and credential commands run with a fail-closed network attempt recorder; transport checks use a local fake HTTPS controller.
-Domain code, command parsing and execution stay real.
-The guard is proven with a deliberately attempted loopback connection before checking for zero attempts.
-Version measurements compare eleven paired samples per alias against the same host's bare Node median, with a relative two-times budget and no fixed millisecond threshold.
-The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
-Temporary installation and user state are removed even on failure.
+`pnpm check` runs strict types, lint, the packaged verification suite, versioned contract checks and private-file, paging and transport tests.
+`pnpm verify:packaged -- --task <id>` runs a single packaged selector against the built, packed and installed executable, with outbound network denied except a synthetic controller.
+`pnpm verify:artium` is an opt-in proof against an external fixture and prints a skip reason when none is selected.
+Tests never connect to a real controller or use a real API key.
+`src/commands.json` owns command names and operation IDs, and the build derives the catalogue, capability metadata and skill from the [retained OpenAPI sources](evidence/README.md).
+Releases are published by release-please through npm trusted publishing.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for test-quality rules.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0 through B4.10 selectors, plus the default implemented suite, are supported now.
-The B4.0 and B4.1 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
-The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
-The B4.2, B4.3 and B4.4 selectors exercise policy, zone and ACL writes and ordering against independent fake state under outbound network denial.
-The B4.5 and B4.6 selectors exercise all seven DNS policy types and all three traffic-list types, including their nested entries, through preview, exact grants, confirmation and reconciliation.
-The B4.7 and B4.8 selectors exercise Wi-Fi variants and nested enums, voucher batches, protected delivery failures, read-only code recovery and bulk deletion with a late-arriving unapproved match.
-The B4.9 and B4.10 selectors exercise guest authorization, adoption, removal, restart and PoE power cycling with exact grants, confirmation drift, failed acknowledgements and read-only request replay.
-B3 processes run under an outbound network deny allowing only their synthetic vendor listener.
-Hosted journeys remain opt-in and emit an explicit skip reason when no frozen fixture is configured.
-The B2.2-B2.9 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants, policy ordering, ACL/DNS/traffic variants, voucher and Wi-Fi redaction, switching structures and the documented contract gates.
-The B2.10 selector also covers bounded home output, redacted full text and directory-scoped integration preview, confirmation, installation and repeat setup.
-The B2.0 journey adds installed-executable paging, retry, redirect, body-budget and deadline checks plus direct transport concurrency checks against the same synthetic TLS service.
-`verify:contracts` separately exercises schema roots, enum versions, required fields, nullable conflicts and added fields against independently selected synthetic contract fixtures.
-The B1.2a journey reuses the credential suite's synthetic TLS setup and drives installed info, doctor, site list and home against independently seeded HTTPS responses.
-Unknown, future, empty and duplicate selectors fail rather than skip.
-Future stage tasks remain unimplemented; a B1.1 pass does not complete B1.
-Run the same selector on native Windows for separate Windows evidence.
-Linux results cannot establish Windows behavior.
-Native Windows ACL and install evidence remain PENDING on Linux/WSL; injected Windows branch tests are supplementary only.
-TLS tests generate temporary synthetic CAs, certificates and keys with OpenSSL, exercise accepted and rejected peers, and count HTTP requests at the fake controller.
-No private keys are committed or retained.
-See [retained evidence](evidence/README.md) for original paths and manifest hashes.
+## Security
 
-The Artium Linux proof requires a separate, built fixture descended from revision `3cfc65afc2d7c1a0f50d2f6e02dc2ee13d6fd7e8`, with the reviewed B1.3 delta and current package installed.
-The installed package's runtime assets must match this checkout's current `dist` build.
-Both paths must be absolute; the output directory must already exist outside this repository and must not contain a `scratch` entry.
-It never edits the shared fixture checkout or connects to a controller.
+No `SECURITY.md` ships yet; the security policy is pending.
 
-```text
-pnpm verify:artium --host /absolute/task-owned/artium --output /absolute/external/evidence
-```
+## License
 
-The real host CLI talks to the real loopback server, parser, shared v2 profile writer and runner.
-Only task-owned loopback vendor and host ports are reachable through the Node socket guard in the host, client and packaged child.
-The proof checks typed info/sites and the combined read journey described above for both retained versions, competing developer profiles, admission failures before vendor access, read journal classification, cancellation, deadlines, output bounds and private input cleanup.
-The fixture-only input consumer is host evidence and adds no command to the UniFi package.
-The host's shorter deadline remains distinct from the package request deadline described in [Credentials and transport](#credentials-and-transport).
-The verifier writes provenance, package integrity, effective limits and native platform results to `artium-proof.json` outside this repository, and removes synthetic TLS keys and scratch state.
-This harness currently uses the native Linux process observer and POSIX host runner.
-Native Windows execution remains PENDING and is a blocking host compatibility gate; WSL or these Linux results cannot pass it.
+No `LICENSE` file ships yet; the license is pending.

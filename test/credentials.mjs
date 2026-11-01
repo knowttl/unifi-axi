@@ -263,7 +263,7 @@ Set-Acl -LiteralPath $p -AclObject $acl
           const { verifyB4 } = await import('./b4.ts');
           inventoryRows.push(...await verifyB4({ ...harness, task: writeTask === 'all' ? 'B4.1' : writeTask }));
         }
-        if (writeTask === 'all' || ['B4.2', 'B4.3', 'B4.4'].includes(writeTask)) {
+        if (writeTask === 'all' || ['B4.2', 'B4.3', 'B4.4', 'B4.5', 'B4.6'].includes(writeTask)) {
           const { verifyPolicyWrites } = await import('./policy-writes.ts');
           inventoryRows.push(...await verifyPolicyWrites(harness));
         }

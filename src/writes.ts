@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 import { application, sites, selectSite } from './application.js';
 import { catalogue, parameterFlag, writeOperations, type Operation } from './catalogue.js';
 import { Profiles, writeAllowed, type Selection } from './profiles.js';
@@ -17,6 +18,8 @@ const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export const foundationWrites = writeOperations;
 
 const families = [
+  { writes: ['OP-026', 'OP-027', 'OP-029'], list: 'OP-025', show: 'OP-028', rows: 'dnsPolicies', row: 'dnsPolicy', target: 'dns-policy-id' },
+  { writes: ['OP-062', 'OP-063', 'OP-065'], list: 'OP-061', show: 'OP-064', rows: 'trafficLists', row: 'trafficList', target: 'traffic-matching-list-id' },
   { writes: ['OP-049', 'OP-050', 'OP-052'], list: 'OP-048', show: 'OP-051', rows: 'networks', row: 'network', target: 'network-id' },
   { writes: ['OP-008', 'OP-011', 'OP-013'], list: 'OP-007', show: 'OP-012', rows: 'aclRules', row: 'aclRule', target: 'acl-rule-id' },
   { writes: ['OP-031', 'OP-034', 'OP-036', 'OP-037'], list: 'OP-030', show: 'OP-035', rows: 'firewallPolicies', row: 'firewallPolicy', target: 'firewall-policy-id' },
@@ -41,6 +44,31 @@ function normalizeProtocols(value: unknown): void {
     if (typeof protocol.name === 'string') protocol.name = protocol.name.toLowerCase();
   }
   Object.values(record).forEach(normalizeProtocols);
+}
+
+function validateTrafficList(body: Record<string, unknown>): void {
+  const family = body.type === 'IPV4_ADDRESSES' ? 4 : 6;
+  const valid = (body.items as Record<string, unknown>[]).every(item => {
+    if (item.type === 'IP_ADDRESS') {
+      const value = item.value as string;
+      return isIP(value) === family && !value.includes('%');
+    }
+    if (item.type === 'SUBNET') {
+      const parts = (item.value as string).match(/^(.+)\/(\d{1,3})$/);
+      return parts !== null && isIP(parts[1]!) === family && !parts[1]!.includes('%') &&
+        Number(parts[2]) <= (family === 4 ? 32 : 128);
+    }
+    if (item.type === 'IP_ADDRESS_RANGE') {
+      const start = item.start as string;
+      const stop = item.stop as string;
+      return isIP(start) === 4 && isIP(stop) === 4 &&
+        start.split('.').reduce((value, octet) => value * 256 + Number(octet), 0) <=
+        stop.split('.').reduce((value, octet) => value * 256 + Number(octet), 0);
+    }
+    if (item.type === 'PORT_NUMBER_RANGE') return (item.start as number) <= (item.stop as number);
+    return true;
+  });
+  if (!valid) throw new ToolError('INVALID_ARGUMENT', 'Traffic list entries require valid addresses, CIDR prefixes and ordered ranges.');
 }
 
 function policy(selected: Selection, grants: string[]): void {
@@ -118,6 +146,7 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
       throw new ToolError('INVALID_ARGUMENT', 'Request body does not match the selected Network contract.');
     }
     body = parsed as Record<string, unknown>;
+    if (['OP-062', 'OP-065'].includes(operation.id)) validateTrafficList(body);
     if (operation.command.startsWith('firewall policy ')) normalizeProtocols(body);
     if (['OP-049', 'OP-052'].includes(operation.id)) grants.push(`${operation.vendorOperationId}:${String(body.management)}`);
   }

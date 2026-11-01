@@ -11,7 +11,7 @@ import { verifyIntegrations } from '../test/integrations.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9', 'B2.10', 'B3.1', 'B3.2', 'B3.3', 'B4.0', 'B4.1', 'B4.2', 'B4.3', 'B4.4', 'B4.7', 'B4.8'].includes(args[1])),
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9', 'B2.10', 'B3.1', 'B3.2', 'B3.3', 'B4.0', 'B4.1', 'B4.2', 'B4.3', 'B4.4', 'B4.5', 'B4.6', 'B4.7', 'B4.8'].includes(args[1])),
   'Select an implemented task. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
@@ -32,9 +32,11 @@ const implemented = ['info', 'site list', 'country list', 'dpi application list'
   'traffic-list list', 'traffic-list show', 'wifi broadcast list', 'wifi broadcast show', 'network create', 'network delete', 'network update',
   'firewall policy create', 'firewall policy order set', 'firewall policy delete', 'firewall policy patch', 'firewall policy update',
   'firewall zone create', 'firewall zone delete', 'firewall zone update', 'acl-rule create', 'acl-rule order set', 'acl-rule delete', 'acl-rule update',
-  'wifi broadcast create', 'wifi broadcast update', 'wifi broadcast delete', 'hotspot voucher create', 'hotspot voucher delete', 'hotspot voucher delete-many'];
+  'wifi broadcast create', 'wifi broadcast update', 'wifi broadcast delete', 'hotspot voucher create', 'hotspot voucher delete', 'hotspot voucher delete-many',
+  'dns policy create', 'dns policy update', 'dns policy delete', 'traffic-list create', 'traffic-list update', 'traffic-list delete'];
 const expectedStatus = command => implemented.includes(command) ? 'implemented' : 'not-implemented';
 const detail = ['network update', 'firewall policy order set', 'firewall policy delete', 'firewall policy patch', 'firewall policy update',
+  'dns policy update', 'dns policy delete', 'traffic-list update', 'traffic-list delete',
   'firewall zone delete', 'firewall zone update', 'acl-rule delete', 'acl-rule update',
   'network delete', 'device show', 'device statistics latest', 'client show', 'network show', 'network references',
   'acl-rule show', 'dns policy show', 'firewall policy order show', 'firewall policy show', 'firewall zone show',
@@ -212,6 +214,8 @@ try {
       reads: sha(readFileSync(join(root, 'test/reads.mjs'))),
       writes: sha(readFileSync(join(root, 'test/writes.ts'))),
       b4: sha(readFileSync(join(root, 'test/b4.ts'))),
+      policyWrites: sha(readFileSync(join(root, 'test/policy-writes.ts'))),
+      dnsTraffic: sha(readFileSync(join(root, 'test/dns-traffic-fixtures.ts'))),
       wifiVouchers: sha(readFileSync(join(root, 'test/wifi-vouchers.ts'))),
       writeGuard: sha(readFileSync(join(root, 'test/fixtures/write-guard.ts'))) },
     timings, rows, futureTasks: 'unimplemented', liveMutationProbes: '32 unrun' }, null, 2));

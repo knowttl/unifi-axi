@@ -18,6 +18,8 @@ const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export const foundationWrites = writeOperations;
 
 const families = [
+  { writes: ['OP-016'], list: 'OP-014', show: 'OP-015', rows: 'clients', row: 'client', target: 'client-id' },
+  { writes: ['OP-019', 'OP-020', 'OP-022', 'OP-023'], list: 'OP-018', show: 'OP-021', rows: 'devices', row: 'device', target: 'device-id' },
   { writes: ['OP-026', 'OP-027', 'OP-029'], list: 'OP-025', show: 'OP-028', rows: 'dnsPolicies', row: 'dnsPolicy', target: 'dns-policy-id' },
   { writes: ['OP-062', 'OP-063', 'OP-065'], list: 'OP-061', show: 'OP-064', rows: 'trafficLists', row: 'trafficList', target: 'traffic-matching-list-id' },
   { writes: ['OP-049', 'OP-050', 'OP-052'], list: 'OP-048', show: 'OP-051', rows: 'networks', row: 'network', target: 'network-id' },
@@ -27,6 +29,7 @@ const families = [
   { writes: ['OP-043', 'OP-045', 'OP-046'], list: 'OP-044', show: 'OP-047', rows: 'vouchers', row: 'voucher', target: 'voucher-id' },
   { writes: ['OP-070', 'OP-071', 'OP-073'], list: 'OP-069', show: 'OP-072', rows: 'wifiBroadcasts', row: 'wifiBroadcast', target: 'wifi-broadcast-id' },
 ];
+const actions = new Set(['OP-016', 'OP-022', 'OP-023']);
 const ordering: Record<string, { read: string; row: string }> = {
   'OP-010': { read: 'OP-009', row: 'aclRuleOrder' }, 'OP-033': { read: 'OP-032', row: 'firewallPolicyOrder' },
 };
@@ -127,7 +130,8 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   const query = new URLSearchParams();
   for (const [index, parameter] of operation.contracts.find(contract => contract.version === version)!.parameters.entries()) {
     const raw = inputs[parameterFlag(parameter.name)];
-    let value = raw === undefined ? parameter.schema.default : parameter.schema.type === 'boolean' ? raw === 'true' : raw;
+    let value = raw === undefined ? parameter.schema.default : parameter.schema.type === 'boolean' ? raw === 'true' :
+      ['integer', 'number'].includes(parameter.schema.type ?? '') ? Number(raw) : raw;
     if (value === undefined && !parameter.required) continue;
     if (validator.validate(`${pointer}/parameters/${index}/schema`, value).length) throw new ToolError('INVALID_ARGUMENT', `Invalid --${parameterFlag(parameter.name)}.`);
     if (typeof value === 'string' && parameter.schema.format === 'uuid') value = value.toLowerCase();
@@ -146,6 +150,7 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
       throw new ToolError('INVALID_ARGUMENT', 'Request body does not match the selected Network contract.');
     }
     body = parsed as Record<string, unknown>;
+    if (actions.has(operation.id)) grants.push(`${operation.vendorOperationId}:${String(body.action)}`);
     if (['OP-062', 'OP-065'].includes(operation.id)) validateTrafficList(body);
     if (operation.command.startsWith('firewall policy ')) normalizeProtocols(body);
     if (['OP-049', 'OP-052'].includes(operation.id)) grants.push(`${operation.vendorOperationId}:${String(body.management)}`);
@@ -172,12 +177,25 @@ async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' 
   const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!,
     { site: request.site, ...request.selectors }, version, ctx.peer, true);
   const rows = (listing as Record<string, unknown>)[family.rows] as Record<string, unknown>[];
+  if (request.operation.id === 'OP-019') {
+    const pending = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-006')!, {}, version, ctx.peer);
+    return { pending: ((pending as Record<string, unknown>).pendingDevices as Record<string, unknown>[]).filter(row => row.macAddress === request.body!.macAddress),
+      adopted: rows.filter(row => row.macAddress === request.body!.macAddress) };
+  }
   if (request.operation.id === 'OP-043') return rows.toSorted((a, b) => String(a.id).localeCompare(String(b.id)));
   if (request.operation.id === 'OP-049') return rows.filter(row => row.vlanId === request.body!.vlanId).map(row => ({ id: row.id, vlanId: row.vlanId }));
   if (request.operation.method === 'POST' && !request.target) return rows;
   if (!rows.some(row => (row.id as string).toLowerCase() === request.target)) return null;
-  return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.show)!,
-    { site: request.site, [family.target]: request.target! }, version, ctx.peer, true) as Record<string, unknown>)[family.row];
+  const state = (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.show)!,
+    { site: request.site, [family.target]: request.target! }, version, ctx.peer, true) as Record<string, unknown>)[family.row] as Record<string, unknown>;
+  if (request.operation.id === 'OP-016') {
+    const access = state.access as Record<string, unknown>;
+    if (access.authorization) {
+      const authorization = Object.fromEntries(Object.entries(access.authorization).filter(([key]) => key !== 'usage'));
+      return { ...state, access: { ...access, authorization } };
+    }
+  }
+  return state;
 }
 
 function receipt(record: Intent, requestId: string) {
@@ -201,9 +219,12 @@ async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> 
     }) ? 'verified' : record.outcome;
   }
   if (!record.target && !ordering[record.operation]) return record.outcome;
-  const request = { operation: operation.id === 'OP-049' ? catalogue.find(op => op.id === 'OP-050')! : operation,
+  const request = { operation: operation.id === 'OP-049' ? catalogue.find(op => op.id === 'OP-050')! :
+    operation.id === 'OP-019' ? catalogue.find(op => op.id === 'OP-020')! : operation,
     site: record.site, target: record.target, body: null, selectors: record.selectors ?? {} };
   const state = await selectedState(ctx, request) as Record<string, unknown> | null;
+  // Resource reads cannot prove a restart, power cycle or this invocation's guest authorization completed.
+  if (actions.has(operation.id)) return record.outcome;
   if (operation.command.startsWith('firewall policy ')) normalizeProtocols(state);
   if (operation.method === 'DELETE') return state === null && ['accepted', 'verified', 'no-op'].includes(record.outcome) ? 'verified' : record.outcome;
   if (state && ['accepted', 'verified'].includes(record.outcome) && digest(Object.fromEntries(record.bodyKeys.map(key => [key, state[key]]))) === record.bodyHash) return 'verified';
@@ -241,6 +262,7 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
     help: ['Repeat the same request with --execute --confirm <confirmation> --request-id <stable-id>. Concurrent vendor changes can occur after the final read.'] };
   if (values.confirm !== confirmation) throw new ToolError('CONFIRMATION_MISMATCH', 'Request, selected state or identity changed. Preview the request again.');
   let projection = request.body;
+  if (operation.id === 'OP-019') projection = { macAddress: request.body!.macAddress };
   if (operation.id === 'OP-045') projection = Object.fromEntries(Object.entries(request.body!).filter(([key]) => key !== 'count'));
   if (operation.method === 'PUT' && !ordering[operation.id] && operation.id !== 'OP-052') {
     projection = contractValidator(ctx.api.contract!).replacementProjection(
@@ -275,12 +297,13 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
       url.searchParams.set('filter', `and(${values.filter},id.in(${request.targets.join(',')}))`);
       path = url.pathname + url.search;
     }
+    const responses = operation.contracts.find(contract => contract.version === ctx.api.contract)!.responses as Record<string, { content?: unknown }>;
+    const status = Number(Object.keys(responses).find(code => /^2\d\d$/.test(code))!);
     const response = await sendMutation(ctx.selected.profile, ctx.secret, path, {
       method: operation.method, body: request.body === null ? undefined : JSON.stringify(request.body),
-      status: operation.method === 'POST' ? 201 : 200, peer: ctx.peer, beforeSend,
+      status, bodyless: !responses[String(status)]!.content, peer: ctx.peer, beforeSend,
     });
-    if (request.body || ['OP-043', 'OP-046'].includes(operation.id)) {
-      const status = operation.method === 'POST' ? 201 : 200;
+    if (responses[String(status)]!.content) {
       const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}/responses/${status}/content/application~1json/schema`;
       if (contractValidator(ctx.api.contract!).validate(pointer, response).length) throw new ToolError('RESPONSE_INVALID', 'Invalid mutation acknowledgement.');
       if (operation.id === 'OP-045') {
@@ -288,7 +311,12 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
         if (!rows || rows.length !== (request.body!.count ?? 1) || rows.some(row => typeof row.id !== 'string' || !uuid.test(row.id)) ||
             new Set(rows.map(row => String(row.id).toLowerCase())).size !== rows.length) throw new ToolError('RESPONSE_INVALID', 'Invalid generated voucher batch.');
         record.targets = rows.map(row => String(row.id).toLowerCase()).sort();
+      } else if (actions.has(operation.id)) {
+        if ((response as Record<string, unknown>).action !== request.body!.action) throw new ToolError('RESPONSE_INVALID', 'Acknowledgement does not match the selected action.');
       } else if (operation.method === 'POST') {
+        if (operation.id === 'OP-019' && (response as Record<string, unknown>).macAddress !== request.body!.macAddress) {
+          throw new ToolError('RESPONSE_INVALID', 'Adoption acknowledgement does not match the selected MAC address.');
+        }
         const target = (response as Record<string, unknown>).id;
         if (typeof target !== 'string' || !uuid.test(target)) throw new ToolError('RESPONSE_INVALID', 'Invalid created resource ID.');
         record.target = target.toLowerCase();

@@ -136,8 +136,9 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
   const investigated = await cli([]);
   assert.deepEqual(investigated.api, { applicationVersion: version, contract: '11.0.97', status: 'unverified', writesAvailable: false });
   seed(serve);
-  assert.equal((await cli(['device', 'adopt', '--site', first.id], 1)).error.code, 'NOT_IMPLEMENTED');
-  assert.deepEqual(requests(), [], 'Writes stay unavailable even with an explicit contract and write settings');
+  assert.equal((await cli(['device', 'adopt', '--site', first.id], 1)).error.code, 'UNVERIFIED_API_VERSION');
+  assert.equal(requests().length, 1, 'Unknown-version writes stop after bootstrap even with an explicit contract and write settings');
+  assert.equal(requests()[0].method, 'GET');
 
   configure({ lab: profile });
   for (const malformed of [null, {}, { applicationVersion: 11 }, { data: { applicationVersion: '11.0.97' } }]) {

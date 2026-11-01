@@ -271,6 +271,23 @@ Repeat the exact owned request with its original confirmation, request ID and ou
 Alternatively, use `write reconcile --request-id <id>` to inspect ownership, then export each stored ID through `hotspot voucher show --voucher-id <id> --secret-output <new-file>` or `wifi broadcast show --wifi-broadcast-id <id> --secret-output <new-file>`.
 Never issue a new generation request to recover an existing code.
 
+## Guest access and device actions
+
+`client action --client-id <uuid>` accepts `AUTHORIZE_GUEST_ACCESS` and `UNAUTHORIZE_GUEST_ACCESS` in a protected `--body-file`.
+Authorization accepts the contract's optional time, data quota and upload/download limits.
+Guest confirmations exclude `access.authorization.usage` counters from the selected client state; authorization changes still invalidate confirmation at execution or final dispatch.
+Grant `executeConnectedClientAction` plus `executeConnectedClientAction:<action>` separately for each action.
+`device adopt` accepts `macAddress` and `ignoreDeviceLimit` in its body and requires `adoptDevice`.
+Its confirmation includes the matching pending and adopted device state, and its receipt retains the returned device UUID.
+Device writes require device-state reads and inherit their [version-specific contract gates](#inventory-clients-networks-and-references).
+`device remove --device-id <uuid>` requires `removeDevice`.
+`device action` with `RESTART` requires `executeAdoptedDeviceAction` plus `executeAdoptedDeviceAction:RESTART`.
+`device interfaces ports action --device-id <uuid> --port-idx <integer>` with `POWER_CYCLE` requires `executePortAction` plus `executePortAction:POWER_CYCLE`.
+All use the shared preview, exact confirmation, write policy and durable request ID controls.
+Restart and PoE actions accept bodyless HTTP 200 acknowledgements.
+Action receipts remain `accepted` because resource reads cannot prove action completion; ambiguous outcomes remain `unknown` and are never resent.
+These operations are tested only against synthetic controllers; disruptive live actions require separate authorization.
+
 ## Credentials and transport
 
 Use `config path` to find configuration and `profile list` to list its profiles.
@@ -381,6 +398,8 @@ pnpm verify:packaged -- --task B1.2a
 pnpm verify:packaged -- --task B2.0
 pnpm verify:packaged -- --task B4.7
 pnpm verify:packaged -- --task B4.8
+pnpm verify:packaged -- --task B4.9
+pnpm verify:packaged -- --task B4.10
 pnpm verify:contracts -- --task B2.1
 ```
 
@@ -398,12 +417,13 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0 through B4.8 selectors, plus the default implemented suite, are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0 through B4.10 selectors, plus the default implemented suite, are supported now.
 The B4.0 and B4.1 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
 The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
 The B4.2, B4.3 and B4.4 selectors exercise policy, zone and ACL writes and ordering against independent fake state under outbound network denial.
 The B4.5 and B4.6 selectors exercise all seven DNS policy types and all three traffic-list types, including their nested entries, through preview, exact grants, confirmation and reconciliation.
 The B4.7 and B4.8 selectors exercise Wi-Fi variants and nested enums, voucher batches, protected delivery failures, read-only code recovery and bulk deletion with a late-arriving unapproved match.
+The B4.9 and B4.10 selectors exercise guest authorization, adoption, removal, restart and PoE power cycling with exact grants, confirmation drift, failed acknowledgements and read-only request replay.
 B3 processes run under an outbound network deny allowing only their synthetic vendor listener.
 Hosted journeys remain opt-in and emit an explicit skip reason when no frozen fixture is configured.
 The B2.2-B2.9 selectors run the combined read journey against the installed package, including filtered paging, exact targets, field-path failures, network variants, policy ordering, ACL/DNS/traffic variants, voucher and Wi-Fi redaction, switching structures and the documented contract gates.

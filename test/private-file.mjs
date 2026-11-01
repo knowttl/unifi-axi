@@ -7,6 +7,56 @@ import { PrivateFiles } from '../dist/private-file.js';
 import { Profiles, validateProfile } from '../dist/profiles.js';
 import { Redactor } from '../dist/security.js';
 
+for (const { name, relative, exclusive, flushed } of [
+  { name: 'new directory chain', relative: ['new', 'leaf'], exclusive: false,
+    flushed: [['new', 'leaf'], ['new'], []] },
+  { name: 'existing directory', relative: [], exclusive: false, flushed: [[]] },
+  { name: 'exclusive claim', relative: ['leaf'], exclusive: true,
+    flushed: [['leaf'], []] },
+]) {
+  test(`Private directory sync covers ${name} without flushing unrelated ancestors`, { skip: process.platform === 'win32' }, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'unifi-directory-sync-'));
+    const synced = [];
+    class ObservedFiles extends PrivateFiles {
+      async syncDirectory(path) {
+        synced.push(path);
+        await super.syncDirectory(path);
+      }
+    }
+    try {
+      const files = new ObservedFiles();
+      await files.directory(root);
+      assert.equal(synced.at(-1), '/', 'Initial directory setup persists ancestors through the filesystem root');
+      synced.length = 0;
+      await files.directory(join(root, ...relative), exclusive);
+      assert.deepEqual(synced, flushed.map(parts => join(root, ...parts)));
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+}
+
+test('Failed directory sync leaves ancestor durability unconfirmed', { skip: process.platform === 'win32' }, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'unifi-directory-sync-'));
+  const synced = [];
+  let fail = true;
+  class ObservedFiles extends PrivateFiles {
+    async syncDirectory(path) {
+      synced.push(path);
+      if (path === root && fail) throw new Error('synthetic ancestor sync failure');
+      await super.syncDirectory(path);
+    }
+  }
+  try {
+    const files = new ObservedFiles();
+    const path = join(root, 'leaf');
+    await assert.rejects(files.directory(path), { message: 'synthetic ancestor sync failure' });
+    fail = false;
+    synced.length = 0;
+    await files.directory(path);
+    assert.equal(synced[0], path);
+    assert.equal(synced.at(-1), '/', 'A failed flush cannot justify skipping ancestors on retry');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('Windows private-file branch protects directories and temporary files before publishing', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'unifi-windows-branch-'));
   const path = join(directory, 'config.json');

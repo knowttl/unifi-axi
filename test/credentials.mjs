@@ -59,6 +59,8 @@ Set-Acl -LiteralPath $p -AclObject $acl
   configure();
 
   async function cli(args, code = 0, overrides = {}, guarded = true) {
+    const started = performance.now();
+    const parentLoop = performance.eventLoopUtilization();
     const firstExchange = exchanges.length;
     const child = spawn(process.execPath, [...(guarded ? ['--import', guard] : []), executable, ...args], {
       cwd: home, env: { ...env, UNIFI_AXI_CONFIG: config,
@@ -70,7 +72,11 @@ Set-Acl -LiteralPath $p -AclObject $acl
     child.stdout.on('data', value => { stdout += value; });
     child.stderr.on('data', value => { stderr += value; });
     const [status, signal] = await once(child, 'close');
-    assert.equal(signal, null, `${args.join(' ')}\n${stdout}${stderr}`);
+    const failure = signal === null ? '' : JSON.stringify({ elapsedMs: Math.round(performance.now() - started),
+      killed: child.killed, parentEventLoop: performance.eventLoopUtilization(parentLoop),
+      heapBytes: process.memoryUsage().heapUsed,
+      exchanges: exchanges.slice(firstExchange).map(({ method, path, status }) => ({ method, path, status })) });
+    assert.equal(signal, null, `${args.join(' ')}\n${stdout}${stderr}${failure}`);
     if (code === -1) assert.ok([0, 1].includes(status), `${args.join(' ')}\n${stdout}${stderr}`);
     else assert.equal(status, code, `${args.join(' ')}\n${stdout}${stderr}`);
     assert.equal(stderr, '');

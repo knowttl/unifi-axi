@@ -35,9 +35,10 @@ export async function verifyPolicyWrites(h: Harness) {
       let mutations = 0;
       let sent: unknown;
       let mode = 'normal';
+      let retained: Row = {};
       let order: Row = {};
       const reset = () => {
-        h.configure({ lab: profile }); state = [initial, neighbour]; mutations = 0; sent = undefined; mode = 'normal';
+        h.configure({ lab: profile }); state = [initial, neighbour]; mutations = 0; sent = undefined; mode = 'normal'; retained = {};
         order = family.task === 'B4.2' ? { orderedFirewallPolicyIds: { beforeSystemDefined: [id], afterSystemDefined: [neighbourId] } } : { orderedAclRuleIds: [id, neighbourId] };
         h.seed((request, response) => {
           const url = new URL(request.url!, h.trusted.origin);
@@ -60,8 +61,9 @@ export async function verifyPolicyWrites(h: Harness) {
             else if (request.method === 'DELETE') state = state.filter(row => row.id !== id);
             else {
               result = { ...(request.method === 'PATCH' ? state.find(row => row.id === id) : {}),
+                ...(family.task === 'B4.2' && version === '11.0.97' && request.method !== 'PATCH' ? { reportFlowEnabled: true } : {}),
                 ...(sent as Row), id, index: 0, metadata: { origin: 'USER_DEFINED' } };
-              state = [...state.filter(row => row.id !== id), result];
+              state = [...state.filter(row => row.id !== id), { ...result, ...retained }];
             }
             if (mode === 'lost-ack') { request.socket.destroy(); return; }
             response.statusCode = request.method === 'POST' ? 201 : 200;
@@ -100,6 +102,50 @@ export async function verifyPolicyWrites(h: Harness) {
         state = state.map(row => row.id === id ? { ...row, name: 'Changed since preview' } : row);
         assert.equal((await run(execute(args, confirmation), 1)).error.code, 'CONFIRMATION_MISMATCH');
         assert.equal(mutations, 0);
+      }
+      const replacements: { body: Row; retained: Row }[] = [];
+      if (family.task === 'B4.4') {
+        for (const acl of [aclBodies[0]!, aclBodies[3]!]) {
+          const original: Row = { ...acl, description: 'Old description', enforcingDeviceFilter: { type: 'DEVICES', deviceIds: [neighbourId] } };
+          for (const field of ['description', 'enforcingDeviceFilter', 'sourceFilter', 'destinationFilter', ...(acl.type === 'IPV4' ? ['protocolFilter'] : [])]) {
+            const body = { ...original };
+            delete body[field];
+            replacements.push({ body, retained: { [field]: original[field] } });
+          }
+        }
+      }
+      if (family.task === 'B4.2') {
+        const original = firewallVariants(version).at(-1)!;
+        for (const field of ['connectionStateFilter', 'ipsecFilter', 'schedule', 'description', ...(version === '11.0.97' ? ['reportFlowEnabled'] : [])]) {
+          const body = { ...original };
+          delete body[field];
+          replacements.push({ body, retained: { [field]: original[field] } });
+        }
+        for (const field of ['source', 'destination', 'ipProtocolScope']) {
+          const original = firewallVariants(version).find(body => field === 'ipProtocolScope'
+            ? (body[field] as Row).protocolFilter !== undefined : (body[field] as Row).trafficFilter !== undefined)!;
+          replacements.push({ body: firewallBody(version), retained: { [field]: original[field] } });
+        }
+      }
+      for (const replacement of replacements) {
+        reset();
+        retained = replacement.retained;
+        state = [{ ...initial, ...replacement.body, ...retained }, neighbour];
+        const args = command('update', replacement.body);
+        const confirmation = (await run(args)).preview.confirmation;
+        const requestId = `stale-replacement-${++serial}`;
+        assert.equal((await run(execute(args, confirmation, requestId))).write.outcome, 'accepted', JSON.stringify(replacement));
+        assert.deepEqual(sent, replacement.body);
+        assert.deepEqual(state.find(row => row.id === neighbourId), neighbour);
+        assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation.outcome, 'accepted');
+        assert.equal((await run(execute(args, confirmation, requestId))).write.outcome, 'accepted');
+        assert.equal(mutations, 1);
+        state = [{ ...replacement.body,
+          ...(family.task === 'B4.2' && version === '11.0.97' && !Object.hasOwn(replacement.body, 'reportFlowEnabled') ? { reportFlowEnabled: true } : {}),
+          id, index: 0, metadata: { origin: 'USER_DEFINED' } }, neighbour];
+        assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation.outcome, 'verified');
+        assert.equal(mutations, 1);
+        rows.push({ task: family.task, version, action: 'replacement-independent-state', status: 'passed', retained });
       }
       reset();
       const remove = command('delete');

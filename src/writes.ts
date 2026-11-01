@@ -181,8 +181,16 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
     identity: ctx.identity, applicationVersion: ctx.api.applicationVersion },
     help: ['Repeat the same request with --execute --confirm <confirmation> --request-id <stable-id>. Concurrent vendor changes can occur after the final read.'] };
   if (values.confirm !== confirmation) throw new ToolError('CONFIRMATION_MISMATCH', 'Request, selected state or identity changed. Preview the request again.');
+  let projection = request.body;
+  if (operation.method === 'PUT' && !ordering[operation.id]) {
+    projection = contractValidator(ctx.api.contract!).replacementProjection(
+      `#/paths/${escape(operation.path)}/put/requestBody/content/application~1json/schema`, request.body!);
+    if (operation.id === 'OP-037' && ctx.api.contract === '11.0.97' && !Object.hasOwn(request.body!, 'reportFlowEnabled')) {
+      projection.reportFlowEnabled = true;
+    }
+  }
   const record = await journal!.claim({ binding: request.binding, identity: ctx.identity, confirmation, operation: operation.id as Intent['operation'],
-    site: request.site, target: request.target, bodyHash: digest(request.body), bodyKeys: Object.keys(request.body ?? {}).sort(), selectors: request.selectors });
+    site: request.site, target: request.target, bodyHash: digest(projection), bodyKeys: Object.keys(projection ?? {}).sort(), selectors: request.selectors });
   try {
     // Transport calls this after peer verification and before writing HTTP bytes.
     const beforeSend = async () => {

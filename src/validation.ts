@@ -150,6 +150,25 @@ export function compileContract(source: unknown, version: string) {
   }
   return {
     validate(pointer: string, value: unknown): string[] { return compile(at(pointer), pointer)(value, '', false); },
+    replacementProjection(pointer: string, body: Record<string, unknown>): Record<string, unknown> {
+      const properties: Record<string, Schema> = {};
+      const visited = new Set<Schema>();
+      function visit(schema: Schema): void {
+        if (visited.has(schema)) return;
+        visited.add(schema);
+        if (schema.$ref) visit(at(schema.$ref));
+        for (const parent of schema.allOf ?? []) visit(parent);
+        Object.assign(properties, schema.properties);
+        if (schema.discriminator) {
+          const tag = body[schema.discriminator.propertyName];
+          const ref = typeof tag === 'string' ? schema.discriminator.mapping[tag] : undefined;
+          if (ref) visit(at(ref));
+        }
+      }
+      visit(at(pointer));
+      return { ...Object.fromEntries(Object.entries(properties).filter(([, schema]) => !schema.deprecated)
+        .map(([key, schema]) => [key, schema.default])), ...body };
+    },
     structuralConflicts(pointer: string) {
       const reachable = new Set<string>();
       function visit(schema: Schema, location: string): void {

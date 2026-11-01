@@ -212,9 +212,11 @@ pnpm build
 pnpm check
 ```
 
-`pnpm check` runs strict types, lint, the packaged verification suite, versioned contract checks and private-file, paging and transport tests.
+`pnpm check` runs strict types, lint, the package-contract check, the packaged verification suite, versioned contract checks and private-file, paging and transport tests.
+`pnpm verify:package-contract` packs and installs offline, checks the published file list, rejects private keys and local build paths, and smoke-tests the installed launcher and exports without an external fixture.
+Both `pnpm test` and `pnpm check` enforce that package contract with outbound network denied.
 `pnpm verify:packaged -- --task <id>` runs a single packaged selector against the built, packed and installed executable, with outbound network denied except a synthetic controller.
-`pnpm verify:artium` is an opt-in proof against an external fixture and prints a skip reason when none is selected.
+`pnpm verify:artium --host <absolute-reviewed-fixture-path> --output <absolute-external-evidence-directory>` runs the opt-in proof against an external fixture.
 Tests never connect to a real controller or use a real API key.
 `src/commands.json` owns command names and operation IDs, and the build derives the catalogue, capability metadata and skill from the [retained OpenAPI sources](evidence/README.md).
 Releases are published by release-please through npm trusted publishing.

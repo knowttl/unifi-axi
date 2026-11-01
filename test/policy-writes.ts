@@ -316,7 +316,7 @@ export async function verifyPolicyWrites(h: Harness) {
         for (const [type, entry] of invalidEntries) {
           for (const action of ['create', 'update']) {
             reset();
-            const before = structuredClone(state);
+            const before: Row[] = structuredClone(state);
             const args = command(action, { name: 'Invalid entry', type, items: [entry] });
             assert.equal((await run(args, 1)).error.code, 'INVALID_ARGUMENT', JSON.stringify({ version, action, type, entry }));
             assert.equal((await run(execute(args, 'invalid-entry'), 1)).error.code, 'INVALID_ARGUMENT');

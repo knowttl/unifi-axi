@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Harness } from './writes.ts';
 import { aclBodies, firewallBody, firewallRecord, firewallVariants, id, neighbourId, otherSite, site, type Row } from './policy-fixtures.ts';
+import { dnsBodies, trafficBodies, dnsTrafficCases } from './dns-traffic-fixtures.ts';
 
 export async function verifyPolicyWrites(h: Harness) {
   if (process.platform === 'win32') return [{ status: 'pending-native-windows', task: h.task }];
@@ -24,6 +25,10 @@ export async function verifyPolicyWrites(h: Harness) {
         grants: ['createFirewallZone', 'updateFirewallZone', 'deleteFirewallZone'] },
       { task: 'B4.4', command: 'acl-rule', path: 'acl-rules', flag: 'acl-rule-id', bodies: aclBodies,
         grants: ['createAclRule', 'updateAclRule', 'deleteAclRule', 'updateAclRuleOrdering'] },
+      { task: 'B4.5', command: 'dns policy', path: 'dns/policies', flag: 'dns-policy-id', bodies: dnsBodies,
+        grants: ['createDnsPolicy', 'updateDnsPolicy', 'deleteDnsPolicy'] },
+      { task: 'B4.6', command: 'traffic-list', path: 'traffic-matching-lists', flag: 'traffic-matching-list-id', bodies: trafficBodies,
+        grants: ['createTrafficMatchingList', 'updateTrafficMatchingList', 'deleteTrafficMatchingList'] },
     ]) {
       if (h.task !== 'all' && h.task !== family.task) continue;
       const base = `/proxy/network/integration/v1/sites/${site}/${family.path}`;
@@ -34,6 +39,7 @@ export async function verifyPolicyWrites(h: Harness) {
       let state: Row[] = [];
       let mutations = 0;
       let sent: unknown;
+      let sentMethod: string | undefined;
       let mode = 'normal';
       let retained: Row = {};
       let order: Row = {};
@@ -41,6 +47,7 @@ export async function verifyPolicyWrites(h: Harness) {
         h.configure({ lab: profile }); state = [initial, neighbour]; mutations = 0; sent = undefined; mode = 'normal'; retained = {};
         order = family.task === 'B4.2' ? { orderedFirewallPolicyIds: { beforeSystemDefined: [id], afterSystemDefined: [neighbourId] } } : { orderedAclRuleIds: [id, neighbourId] };
         h.seed((request, response) => {
+          assert.equal(request.headers['x-api-key'], h.syntheticKey);
           const url = new URL(request.url!, h.trusted.origin);
           if (url.pathname.endsWith('/info')) return { applicationVersion: version };
           if (url.pathname.includes(`/sites/${otherSite}/`)) { response.writeHead(403); response.end(); return; }
@@ -51,6 +58,11 @@ export async function verifyPolicyWrites(h: Harness) {
             return state.find(row => url.pathname.endsWith(`/${String(row.id)}`));
           }
           mutations++;
+          sentMethod = request.method;
+          if (family.task === 'B4.5' || family.task === 'B4.6') {
+            assert.equal(url.pathname, request.method === 'POST' ? base : `${base}/${id}`);
+            assert.equal(url.search, '');
+          }
           let bytes = '';
           request.on('data', chunk => { bytes += chunk; });
           request.on('end', () => {
@@ -79,22 +91,38 @@ export async function verifyPolicyWrites(h: Harness) {
       };
       for (const action of ['create', 'update', ...(family.task === 'B4.2' ? ['patch'] : [])]) {
         const bodies = action === 'patch' ? [{ loggingEnabled: true, ...(version === '11.0.97' ? { reportFlowEnabled: true } : {}) }] : family.bodies;
-        for (const body of bodies) {
+        for (const [index, body] of bodies.entries()) {
           reset();
+          const metadata = { origin: family.task === 'B4.5' ? ['USER_DEFINED', 'SYSTEM_DEFINED', 'ORCHESTRATED'][index % 3]! : 'USER_DEFINED' };
+          if (family.task === 'B4.5') retained = { metadata };
           if (action === 'create') state = [neighbour];
           const args = command(action, body);
           const before = structuredClone(state);
           const confirmation = (await run(args)).preview.confirmation;
           assert.equal(mutations, 0); assert.deepEqual(state, before);
+          if (family.task === 'B4.5' || family.task === 'B4.6') {
+            h.configure({ lab: { ...profile, writes: { allowWrites: true, operations: [] } } });
+            assert.equal((await run(execute(args, confirmation), 1)).error.code, 'WRITE_DENIED');
+            assert.equal(mutations, 0);
+            h.configure({ lab: profile });
+          }
           const requestId = `success-${++serial}`;
           assert.equal((await run(execute(args, confirmation, requestId))).write.outcome, 'verified', `${family.command} ${action} ${JSON.stringify(body)}`);
           assert.deepEqual(sent, body);
+          assert.equal(sentMethod, action === 'create' ? 'POST' : action === 'patch' ? 'PATCH' : 'PUT');
           assert.deepEqual(state.find(row => row.id === neighbourId), neighbour);
-          assert.deepEqual(state.find(row => row.id === id), { ...(action === 'patch' ? initial : {}), ...body, id, index: 0, metadata: { origin: 'USER_DEFINED' } });
+          assert.deepEqual(state.find(row => row.id === id), { ...(action === 'patch' ? initial : {}), ...body, id, index: 0, metadata });
           assert.equal((await run(execute(args, confirmation, requestId))).write.outcome, 'verified');
           assert.equal(mutations, 1);
           assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation.outcome, 'verified');
-          rows.push({ task: family.task, version, action, status: 'passed', body });
+          const operation = family.task === 'B4.5' ? (action === 'create' ? 'OP-026' : 'OP-029') :
+            family.task === 'B4.6' ? (action === 'create' ? 'OP-062' : 'OP-065') : undefined;
+          rows.push({ task: family.task, version, operation, action, status: 'passed', body,
+            ...(operation ? { acceptance: [`AC-${operation.slice(3)}`, `AC-${operation.slice(3)}-PREVIEW`, `AC-${operation.slice(3)}-VARIANTS`],
+              cases: [...dnsTrafficCases[String(body.type)]!, ...(family.task === 'B4.5'
+                ? ['VAR-1028', 'VAR-1033', ['VAR-247', 'VAR-246', 'VAR-245'][index % 3]!]
+                : ['VAR-1032', 'VAR-1069'])],
+              direction: 'preview-exact-request-independent-state-grant-denial-and-no-replay' } : {}) });
         }
         reset();
         const args = command(action, action === 'patch' ? { loggingEnabled: true } : family.bodies[0]);
@@ -175,6 +203,12 @@ export async function verifyPolicyWrites(h: Harness) {
       const confirmation = (await run(remove)).preview.confirmation;
       assert.equal((await run(execute(remove, confirmation))).write.outcome, 'verified');
       assert.deepEqual(state, [neighbour]);
+      assert.equal(sentMethod, 'DELETE');
+      if (family.task === 'B4.5' || family.task === 'B4.6') {
+        const operation = family.task === 'B4.5' ? 'OP-027' : 'OP-063';
+        rows.push({ task: family.task, version, operation, action: 'delete', status: 'passed',
+          acceptance: [`AC-${operation.slice(3)}`, `AC-${operation.slice(3)}-PREVIEW`, `AC-${operation.slice(3)}-VARIANTS`, `STEP-${family.task}`] });
+      }
       const absent = (await run(remove)).preview.confirmation;
       assert.equal((await run(execute(remove, absent))).write.outcome, 'no-op');
       assert.equal(mutations, 1);
@@ -199,7 +233,7 @@ export async function verifyPolicyWrites(h: Harness) {
       assert.equal((await run(['write', 'reconcile', '--request-id', lostId], 1)).reconciliation.outcome, 'unknown');
       assert.equal((await run(execute(create, lost, lostId), 1)).error.code, 'OUTCOME_UNKNOWN');
       assert.equal(mutations, 1);
-      if (family.task !== 'B4.3') {
+      if (family.task === 'B4.2' || family.task === 'B4.4') {
         reset();
         const reordered = family.task === 'B4.2' ? { orderedFirewallPolicyIds: { beforeSystemDefined: [neighbourId, id], afterSystemDefined: [] } } : { orderedAclRuleIds: [neighbourId, id] };
         writeFileSync(bodyFile, JSON.stringify(reordered));
@@ -230,6 +264,19 @@ export async function verifyPolicyWrites(h: Harness) {
       const invalid = command('create', { name: 'Missing required fields' });
       assert.equal((await run(invalid, 1)).error.code, 'INVALID_ARGUMENT');
       assert.equal(mutations, 0);
+      if (family.task === 'B4.5' || family.task === 'B4.6') {
+        for (const body of family.bodies) {
+          reset();
+          const invalidBody = family.task === 'B4.5' ? { ...body, ttlSeconds: -1 } :
+            { ...body, items: [{ type: 'UNKNOWN', value: 443 }] };
+          const invalid = command('create', invalidBody);
+          assert.equal((await run(invalid, 1)).error.code, 'INVALID_ARGUMENT');
+          assert.equal(mutations, 0);
+          const wrongTag = command('update', { ...body, type: 'UNKNOWN' });
+          assert.equal((await run(wrongTag, 1)).error.code, 'INVALID_ARGUMENT');
+          assert.equal(mutations, 0);
+        }
+      }
       if (family.task === 'B4.2') {
         for (const name of ['TCP', 'tcp']) {
           reset(); state = [neighbour];

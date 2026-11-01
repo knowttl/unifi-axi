@@ -235,6 +235,16 @@ All grants also require `writes.allowWrites: true` and remain subject to the rea
 Ordering receipts verify the final sequence through the documented ordering read.
 Ordering bodies must retain exactly the selected IDs without duplicates.
 
+## DNS policies and traffic matching lists
+
+`dns policy` supports `create`, `update` and `delete`, with exact grants `createDnsPolicy`, `updateDnsPolicy` and `deleteDnsPolicy`.
+`traffic-list` supports the same actions with grants `createTrafficMatchingList`, `updateTrafficMatchingList` and `deleteTrafficMatchingList`.
+Both families use the shared write controls, protected `--body-file` input and stable request IDs described above.
+Updates replace the selected resource; deletes require `--dns-policy-id` or `--traffic-matching-list-id`.
+DNS bodies support `A_RECORD`, `AAAA_RECORD`, `CNAME_RECORD`, `FORWARD_DOMAIN`, `MX_RECORD`, `SRV_RECORD` and `TXT_RECORD`.
+Traffic lists support `IPV4_ADDRESSES`, `IPV6_ADDRESSES` and `PORTS`, with the entry types and fields declared by the selected contract.
+Unknown fields, missing required values and invalid nested entry tags fail before mutation.
+
 ## Wi-Fi broadcasts and vouchers
 
 `wifi broadcast` supports `create`, `update` and `delete` with grants `createWifiBroadcast`, `updateWifiBroadcast` and `deleteWifiBroadcast`.
@@ -386,10 +396,11 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3, B4.0 through B4.4, B4.7 and B4.8 selectors, plus the default implemented suite, are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0 through B4.8 selectors, plus the default implemented suite, are supported now.
 The B4.0 and B4.1 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
 The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
 The B4.2, B4.3 and B4.4 selectors exercise policy, zone and ACL writes and ordering against independent fake state under outbound network denial.
+The B4.5 and B4.6 selectors exercise all seven DNS policy types and all three traffic-list types, including their nested entries, through preview, exact grants, confirmation and reconciliation.
 The B4.7 and B4.8 selectors exercise Wi-Fi variants and nested enums, voucher batches, protected delivery failures, read-only code recovery and bulk deletion with a late-arriving unapproved match.
 B3 processes run under an outbound network deny allowing only their synthetic vendor listener.
 Hosted journeys remain opt-in and emit an explicit skip reason when no frozen fixture is configured.

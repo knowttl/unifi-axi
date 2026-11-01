@@ -33,7 +33,8 @@ export const versions = ['10.6.109', '11.0.97'] as const;
 
 export const writeOperations = new Set(['OP-049', 'OP-050', 'OP-052', 'OP-008', 'OP-010', 'OP-011', 'OP-013',
   'OP-031', 'OP-033', 'OP-034', 'OP-036', 'OP-037', 'OP-039', 'OP-040', 'OP-042',
-  'OP-043', 'OP-045', 'OP-046', 'OP-070', 'OP-071', 'OP-073']);
+  'OP-043', 'OP-045', 'OP-046', 'OP-070', 'OP-071', 'OP-073',
+  'OP-026', 'OP-027', 'OP-029', 'OP-062', 'OP-063', 'OP-065']);
 
 export const readOperations = new Set(['OP-003', 'OP-004', 'OP-005', 'OP-006', 'OP-014', 'OP-015',
   'OP-017', 'OP-018', 'OP-021', 'OP-024', 'OP-048', 'OP-051', 'OP-053', 'OP-054', 'OP-066', 'OP-067', 'OP-068',

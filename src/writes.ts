@@ -17,6 +17,8 @@ const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export const foundationWrites = writeOperations;
 
 const families = [
+  { writes: ['OP-026', 'OP-027', 'OP-029'], list: 'OP-025', show: 'OP-028', rows: 'dnsPolicies', row: 'dnsPolicy', target: 'dns-policy-id' },
+  { writes: ['OP-062', 'OP-063', 'OP-065'], list: 'OP-061', show: 'OP-064', rows: 'trafficLists', row: 'trafficList', target: 'traffic-matching-list-id' },
   { writes: ['OP-049', 'OP-050', 'OP-052'], list: 'OP-048', show: 'OP-051', rows: 'networks', row: 'network', target: 'network-id' },
   { writes: ['OP-008', 'OP-011', 'OP-013'], list: 'OP-007', show: 'OP-012', rows: 'aclRules', row: 'aclRule', target: 'acl-rule-id' },
   { writes: ['OP-031', 'OP-034', 'OP-036', 'OP-037'], list: 'OP-030', show: 'OP-035', rows: 'firewallPolicies', row: 'firewallPolicy', target: 'firewall-policy-id' },

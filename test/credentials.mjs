@@ -70,7 +70,7 @@ Set-Acl -LiteralPath $p -AclObject $acl
     child.stdout.on('data', value => { stdout += value; });
     child.stderr.on('data', value => { stderr += value; });
     const [status, signal] = await once(child, 'close');
-    assert.equal(signal, null, stdout + stderr);
+    assert.equal(signal, null, `${args.join(' ')}\n${stdout}${stderr}`);
     if (code === -1) assert.ok([0, 1].includes(status), `${args.join(' ')}\n${stdout}${stderr}`);
     else assert.equal(status, code, `${args.join(' ')}\n${stdout}${stderr}`);
     assert.equal(stderr, '');

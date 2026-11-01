@@ -123,7 +123,8 @@ unifi-axi network references --site <site-id> --network-id <network-id>
 
 Responses preserve gateway, switch and unmanaged network fields and validate their selected subtype.
 Response-side NORM-001 accepts omitted or explicit null `dhcpGuarding` as disabled, preserving null in output.
-Other null fields must satisfy the original schema; request-side normalization remains unavailable.
+Other null fields must satisfy the original schema.
+See [Network write foundation](#network-write-foundation) for request-side NORM-001 support.
 Validation failures include the offending field path without echoing its value.
 The approved 10.6.109 PoE resolution preserves integer values without coercion and rejects strings.
 All 11.0.97 device reads remain blocked with `CONTRACT_CONFLICT` for unresolved CF-007; its integer type and string enum disagree, and no 11.0.97 override is approved.
@@ -150,7 +151,8 @@ No source conflict is silently normalized.
 Exports default off and require `"allowSecretExport": true` in the selected file profile as well as the explicit output flag.
 Without that standing profile opt-in, `SECRET_EXPORT_DENIED` names `allowSecretExport` and refuses before credential resolution, vendor access or file reservation.
 `UNIFI_AXI_READ_ONLY` continues to govern native mutations; it does not replace or change the separate export opt-in.
-The destination must be new and inside an existing private directory.
+The destination must be new and inside an existing private directory owned by the current user with no group or other permissions on Linux; exported files use mode 0600.
+Windows verifies the directory's protected ACL and restricts and verifies the new file's ACL using the rules in [Credentials and transport](#credentials-and-transport).
 The file contains JSON entries with a resource ID, an allowlisted response path and its secret value.
 Voucher codes and personal Wi-Fi passphrases, including WPA2 personal preshared keys, are the only exported values.
 Wi-Fi list exports fetch the documented detail for each listed ID.
@@ -168,6 +170,7 @@ Voucher lists use the documented default limit of 100; other lists use their doc
 
 `network create --body-file <path>` previews network creation.
 `network update --network-id <id> --body-file <path>` previews a complete replacement using PUT.
+Request body files must satisfy the private secret-file checks in [Credentials and transport](#credentials-and-transport), including for previews.
 Both support the selected contract's `GATEWAY`, `SWITCH` and `UNMANAGED` variants, including nested DHCP, IPv6 and NAT settings.
 Requests reject undeclared fields, unmapped tags and missing required subtype fields.
 Optional `dhcpGuarding` accepts omission, a schema-valid configuration or explicit null to disable it under NORM-001.
@@ -317,7 +320,7 @@ pnpm verify:contracts -- --task B2.1
 ```
 
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
-The opt-in Artium proof runs separately with `pnpm verify:artium`, extending B1.3 read coverage with B3.3 write-admission denials and reporting task `B3.3`.
+The opt-in Artium proof runs separately with `pnpm verify:artium`, extending B1.3 read coverage with write-admission and local secret-export denials and reporting task `B3.3`.
 The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
 That command prints an explicit skip reason when no Artium host fixture is selected.
 The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.

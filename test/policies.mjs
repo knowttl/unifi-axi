@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { firewallRecord } from './policy-fixtures.ts';
 
 const site = '9361553d-e20d-45b8-a516-6948ab010011';
 const otherSite = '5925a212-9b6e-402b-a675-c658ab010022';
@@ -137,14 +138,18 @@ export async function verifyPolicies({ cli, seed }) {
     for (const source of [id, secondId]) assert.deepEqual((await run('firewall policy order show',
       ['--source-firewall-zone-id', source, '--destination-firewall-zone-id', secondId])).firewallPolicyOrder,
     { orderedFirewallPolicyIds: orders[source] });
-    // Named protocol source conflicts are reachable even for an empty policy page.
+    // The reviewed case resolution makes policies without protocol filters readable.
     serve(() => ({ offset: 0, limit: 25, count: 0, totalCount: 0, data: [] }));
-    const firewallConflictIds = version === '10.6.109' ? ['CF-002', 'CF-003', 'CF-004'] : ['CF-008', 'CF-009', 'CF-010'];
-    const firewallConflicts = ['IPv4', 'IPv4 and IPv6', 'IPv6'].map((protocol, index) =>
-      `${firewallConflictIds[index]} #/components/schemas/Firewall policy ${protocol} named protocol/properties/name`);
-    for (const [command, flags] of [['firewall policy list', []], ['firewall policy show', ['--firewall-policy-id', id]]]) {
-      assert.deepEqual((await run(command, flags, 1)).error, { code: 'CONTRACT_CONFLICT',
-        message: `Response validation for ${version} blocked by ${firewallConflicts.join(', ')}.` });
+    assert.deepEqual((await run('firewall policy list')).firewallPolicies, []);
+    for (const ipVersion of ['IPV4', 'IPV6', 'IPV4_AND_IPV6']) {
+      for (const name of [undefined, 'TCP', 'tcp', 'not-a-protocol']) {
+        const record = { ...firewallRecord(version), ipProtocolScope: { ipVersion,
+          ...(name === undefined ? {} : { protocolFilter: { type: 'NAMED_PROTOCOL', matchOpposite: false, protocol: { name } } }) } };
+        serve(() => record);
+        const result = await run('firewall policy show', ['--firewall-policy-id', id], name === 'not-a-protocol' ? 1 : 0);
+        if (name === 'not-a-protocol') assert.equal(result.error.code, 'CONTRACT_CONFLICT');
+        else assert.deepEqual(result.firewallPolicy, record);
+      }
     }
 
     serve(url => url.pathname.endsWith(`/${id}`) ? voucher :
@@ -168,7 +173,7 @@ export async function verifyPolicies({ cli, seed }) {
       serve(() => record);
       assert.equal((await run('wifi broadcast show', ['--wifi-broadcast-id', id], 1)).error.code, 'RESPONSE_INVALID');
     }
-    rows.push({ command: 'firewall policy', version, status: 'known-contract-conflict' },
+    rows.push({ command: 'firewall policy show', version, status: 'passed', direction: 'reviewed-protocol-case-resolution' },
       { command: 'hotspot voucher and wifi broadcast list', version, status: 'passed', direction: 'redacted' });
   }
   return rows;

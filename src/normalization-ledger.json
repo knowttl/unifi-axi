@@ -18,8 +18,17 @@
       "fieldHash": "ae3a613ca502fefc545a23f781fbe07db31c3b13d6f4be3219e70efcb8425bf2",
       "interpretation": "Validate integer enum [1,2,3,4] at this exact field without coercion or source mutation. No override applies to 11.0.97.",
       "reviewer": "B2.1 approved PoE resolution",
-      "positive": [1, 2, 3, 4],
-      "negative": ["2", 0, 5]
+      "positive": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "negative": [
+        "2",
+        0,
+        5
+      ]
     }
   ],
   "nullRequests": [
@@ -44,23 +53,150 @@
   ],
   "nullResponses": [
     {
-      "id": "NORM-001", "version": "10.6.109",
+      "id": "NORM-001",
+      "version": "10.6.109",
       "pointer": "#/components/schemas/Network details/properties/dhcpGuarding",
       "sourceHash": "2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c",
       "fieldHash": "6253738ff5edd0d06253c8efb45cee574c397334175d8dd405908d956ed9f0e3",
       "interpretation": "Accept omitted or explicit null as disabled at this response field only. Preserve the value without coercion.",
       "reviewer": "B2.5 approved response-side NORM-001 specification",
-      "positive": [null], "negative": ["disabled", false]
+      "positive": [
+        null
+      ],
+      "negative": [
+        "disabled",
+        false
+      ]
     },
     {
-      "id": "NORM-001", "version": "11.0.97",
+      "id": "NORM-001",
+      "version": "11.0.97",
       "pointer": "#/components/schemas/Network details/properties/dhcpGuarding",
       "sourceHash": "0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66",
       "fieldHash": "6253738ff5edd0d06253c8efb45cee574c397334175d8dd405908d956ed9f0e3",
       "interpretation": "Accept omitted or explicit null as disabled at this response field only. Preserve the value without coercion.",
       "reviewer": "B2.5 approved response-side NORM-001 specification",
-      "positive": [null], "negative": ["disabled", false]
+      "positive": [
+        null
+      ],
+      "negative": [
+        "disabled",
+        false
+      ]
     }
   ],
-  "futureResolutionRequiredFields": ["version", "pointer", "sourceHash", "fieldHash", "interpretation", "reviewer", "positive", "negative"]
+  "futureResolutionRequiredFields": [
+    "version",
+    "pointer",
+    "sourceHash",
+    "fieldHash",
+    "interpretation",
+    "reviewer",
+    "positive",
+    "negative"
+  ],
+  "namedProtocols": [
+    {
+      "id": "CF-002",
+      "version": "10.6.109",
+      "pointer": "#/components/schemas/Firewall policy IPv4 named protocol",
+      "sourceHash": "2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c",
+      "fieldHash": "f38ad2b5e7b60558b4e1eb8260f68f8f86dafff9acb218297f56c3536661cf5e",
+      "interpretation": "Read named-protocol names by case-insensitive matching to the lowercase enum and discriminator mapping; reject unknown names with CONTRACT_CONFLICT. Emit lowercase enum names on write.",
+      "reviewer": "Reviewed implementation specification, 2026-11-01",
+      "evidence": "Retained vendor named-protocol discriminator mappings and name enums; captured OP-030/OP-035 samples omit protocolFilter and do not contradict this rule.",
+      "positive": [
+        "TCP",
+        "tcp"
+      ],
+      "negative": [
+        "UNKNOWN"
+      ]
+    },
+    {
+      "id": "CF-003",
+      "version": "10.6.109",
+      "pointer": "#/components/schemas/Firewall policy IPv4 and IPv6 named protocol",
+      "sourceHash": "2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c",
+      "fieldHash": "f38ad2b5e7b60558b4e1eb8260f68f8f86dafff9acb218297f56c3536661cf5e",
+      "interpretation": "Read named-protocol names by case-insensitive matching to the lowercase enum and discriminator mapping; reject unknown names with CONTRACT_CONFLICT. Emit lowercase enum names on write.",
+      "reviewer": "Reviewed implementation specification, 2026-11-01",
+      "evidence": "Retained vendor named-protocol discriminator mappings and name enums; captured OP-030/OP-035 samples omit protocolFilter and do not contradict this rule.",
+      "positive": [
+        "TCP",
+        "tcp"
+      ],
+      "negative": [
+        "UNKNOWN"
+      ]
+    },
+    {
+      "id": "CF-004",
+      "version": "10.6.109",
+      "pointer": "#/components/schemas/Firewall policy IPv6 named protocol",
+      "sourceHash": "2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c",
+      "fieldHash": "f38ad2b5e7b60558b4e1eb8260f68f8f86dafff9acb218297f56c3536661cf5e",
+      "interpretation": "Read named-protocol names by case-insensitive matching to the lowercase enum and discriminator mapping; reject unknown names with CONTRACT_CONFLICT. Emit lowercase enum names on write.",
+      "reviewer": "Reviewed implementation specification, 2026-11-01",
+      "evidence": "Retained vendor named-protocol discriminator mappings and name enums; captured OP-030/OP-035 samples omit protocolFilter and do not contradict this rule.",
+      "positive": [
+        "TCP",
+        "tcp"
+      ],
+      "negative": [
+        "UNKNOWN"
+      ]
+    },
+    {
+      "id": "CF-008",
+      "version": "11.0.97",
+      "pointer": "#/components/schemas/Firewall policy IPv4 named protocol",
+      "sourceHash": "0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66",
+      "fieldHash": "f38ad2b5e7b60558b4e1eb8260f68f8f86dafff9acb218297f56c3536661cf5e",
+      "interpretation": "Read named-protocol names by case-insensitive matching to the lowercase enum and discriminator mapping; reject unknown names with CONTRACT_CONFLICT. Emit lowercase enum names on write.",
+      "reviewer": "Reviewed implementation specification, 2026-11-01",
+      "evidence": "Retained vendor named-protocol discriminator mappings and name enums; captured OP-030/OP-035 samples omit protocolFilter and do not contradict this rule.",
+      "positive": [
+        "TCP",
+        "tcp"
+      ],
+      "negative": [
+        "UNKNOWN"
+      ]
+    },
+    {
+      "id": "CF-009",
+      "version": "11.0.97",
+      "pointer": "#/components/schemas/Firewall policy IPv4 and IPv6 named protocol",
+      "sourceHash": "0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66",
+      "fieldHash": "f38ad2b5e7b60558b4e1eb8260f68f8f86dafff9acb218297f56c3536661cf5e",
+      "interpretation": "Read named-protocol names by case-insensitive matching to the lowercase enum and discriminator mapping; reject unknown names with CONTRACT_CONFLICT. Emit lowercase enum names on write.",
+      "reviewer": "Reviewed implementation specification, 2026-11-01",
+      "evidence": "Retained vendor named-protocol discriminator mappings and name enums; captured OP-030/OP-035 samples omit protocolFilter and do not contradict this rule.",
+      "positive": [
+        "TCP",
+        "tcp"
+      ],
+      "negative": [
+        "UNKNOWN"
+      ]
+    },
+    {
+      "id": "CF-010",
+      "version": "11.0.97",
+      "pointer": "#/components/schemas/Firewall policy IPv6 named protocol",
+      "sourceHash": "0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66",
+      "fieldHash": "f38ad2b5e7b60558b4e1eb8260f68f8f86dafff9acb218297f56c3536661cf5e",
+      "interpretation": "Read named-protocol names by case-insensitive matching to the lowercase enum and discriminator mapping; reject unknown names with CONTRACT_CONFLICT. Emit lowercase enum names on write.",
+      "reviewer": "Reviewed implementation specification, 2026-11-01",
+      "evidence": "Retained vendor named-protocol discriminator mappings and name enums; captured OP-030/OP-035 samples omit protocolFilter and do not contradict this rule.",
+      "positive": [
+        "TCP",
+        "tcp"
+      ],
+      "negative": [
+        "UNKNOWN"
+      ]
+    }
+  ]
 }

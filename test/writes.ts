@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Profile } from '../src/profiles.js';
 
 interface Result {
-  preview: { confirmation: string; identity: string };
+  preview: { confirmation: string; identity: string; body: Record<string, unknown> | null };
   write: { outcome: string; auditId: string };
   error: { code: string };
   reconciliation: { outcome: string; readOnly: boolean };

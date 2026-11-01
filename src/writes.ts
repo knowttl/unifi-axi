@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { application, sites, selectSite } from './application.js';
-import { catalogue, parameterFlag, type Operation } from './catalogue.js';
+import { catalogue, parameterFlag, writeOperations, type Operation } from './catalogue.js';
 import { Profiles, writeAllowed, type Selection } from './profiles.js';
 import { readOperation } from './reads.js';
 import { ToolError, type Redactor } from './security.js';
@@ -12,7 +12,32 @@ import { PrivateFiles } from './private-file.js';
 
 const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-export const foundationWrites = new Set(['OP-049', 'OP-050', 'OP-052']);
+export const foundationWrites = writeOperations;
+
+const families = [
+  { writes: ['OP-049', 'OP-050', 'OP-052'], list: 'OP-048', show: 'OP-051', rows: 'networks', row: 'network', target: 'network-id' },
+  { writes: ['OP-008', 'OP-011', 'OP-013'], list: 'OP-007', show: 'OP-012', rows: 'aclRules', row: 'aclRule', target: 'acl-rule-id' },
+  { writes: ['OP-031', 'OP-034', 'OP-036', 'OP-037'], list: 'OP-030', show: 'OP-035', rows: 'firewallPolicies', row: 'firewallPolicy', target: 'firewall-policy-id' },
+  { writes: ['OP-039', 'OP-040', 'OP-042'], list: 'OP-038', show: 'OP-041', rows: 'firewallZones', row: 'firewallZone', target: 'firewall-zone-id' },
+];
+const ordering: Record<string, { read: string; row: string }> = {
+  'OP-010': { read: 'OP-009', row: 'aclRuleOrder' }, 'OP-033': { read: 'OP-032', row: 'firewallPolicyOrder' },
+};
+
+function orderedIds(body: Record<string, unknown>): string[] {
+  if (Array.isArray(body.orderedAclRuleIds)) return body.orderedAclRuleIds as string[];
+  return Object.values(body.orderedFirewallPolicyIds as Record<string, string[]>).flat();
+}
+
+function normalizeProtocols(value: unknown): void {
+  if (!value || typeof value !== 'object') return;
+  const record = value as Record<string, unknown>;
+  if (record.type === 'NAMED_PROTOCOL' && record.protocol && typeof record.protocol === 'object') {
+    const protocol = record.protocol as Record<string, unknown>;
+    if (typeof protocol.name === 'string') protocol.name = protocol.name.toLowerCase();
+  }
+  Object.values(record).forEach(normalizeProtocols);
+}
 
 function policy(selected: Selection, grants: string[]): void {
   if (!writeAllowed(selected.profile, grants)) {
@@ -41,6 +66,8 @@ interface Candidate {
   body: Record<string, unknown> | null;
   grants: string[];
   binding: string;
+  selectors: Record<string, string>;
+  targets: string[];
 }
 
 async function candidate(ctx: Context, operation: Operation, values: Record<string, string>): Promise<Candidate> {
@@ -63,8 +90,8 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   }
   let body: Record<string, unknown> | null = null;
   const grants = [operation.vendorOperationId];
-  if (operation.id !== 'OP-050') {
-    if (!values['body-file']) throw new ToolError('INVALID_ARGUMENT', 'Network creation and update require --body-file <path>.');
+  if (operation.contracts.find(contract => contract.version === version)!.requestBody) {
+    if (!values['body-file']) throw new ToolError('INVALID_ARGUMENT', `${operation.command} requires --body-file <path>.`);
     let parsed: unknown;
     try { parsed = JSON.parse(await new PrivateFiles().read(values['body-file'], true)); }
     catch { throw new ToolError('INVALID_ARGUMENT', 'Unable to read a JSON request body file.'); }
@@ -72,24 +99,34 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
       throw new ToolError('INVALID_ARGUMENT', 'Request body does not match the selected Network contract.');
     }
     body = parsed as Record<string, unknown>;
-    grants.push(`${operation.vendorOperationId}:${String(body.management)}`);
+    if (operation.command.startsWith('firewall policy ')) normalizeProtocols(body);
+    if (['OP-049', 'OP-052'].includes(operation.id)) grants.push(`${operation.vendorOperationId}:${String(body.management)}`);
   }
   query.sort();
   if (query.size) path += `?${query}`;
-  const target = inputs['network-id'] ?? null;
+  const family = families.find(family => family.writes.includes(operation.id));
+  const target = family ? inputs[family.target] ?? null : null;
+  const selectors = Object.fromEntries(['source-firewall-zone-id', 'destination-firewall-zone-id']
+    .filter(key => inputs[key] !== undefined).map(key => [key, inputs[key]!]));
+  const targets = target ? [target] : ordering[operation.id] ? orderedIds(body!) : [];
   const binding = digest({ identity: ctx.identity, method: operation.method, path: `/proxy/network/integration${path}`, site: inputs.site!,
-    targets: target ? [target] : [], body, protectedOutput: null, grants });
-  return { operation, path, site: inputs.site!, target, body, grants, binding };
+    targets, body, protectedOutput: null, grants });
+  return { operation, path, site: inputs.site!, target, body, grants, binding, selectors, targets };
 }
 
-async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' | 'site' | 'target' | 'body'>): Promise<unknown> {
+async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' | 'site' | 'target' | 'body' | 'selectors'>): Promise<unknown> {
   const version = ctx.api.contract!;
-  const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-048')!, { site: request.site }, version, ctx.peer);
-  const networks = (listing as Record<string, unknown>).networks as Record<string, unknown>[];
-  if (request.operation.id === 'OP-049') return networks.filter(row => row.vlanId === request.body!.vlanId).map(row => ({ id: row.id, vlanId: row.vlanId }));
-  if (!networks.some(row => (row.id as string).toLowerCase() === request.target)) return null;
-  return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-051')!,
-    { site: request.site, 'network-id': request.target! }, version, ctx.peer)).network;
+  const order = ordering[request.operation.id];
+  if (order) return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === order.read)!,
+    { site: request.site, ...request.selectors }, version, ctx.peer) as Record<string, unknown>)[order.row];
+  const family = families.find(family => family.writes.includes(request.operation.id))!;
+  const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!, { site: request.site }, version, ctx.peer);
+  const rows = (listing as Record<string, unknown>)[family.rows] as Record<string, unknown>[];
+  if (request.operation.id === 'OP-049') return rows.filter(row => row.vlanId === request.body!.vlanId).map(row => ({ id: row.id, vlanId: row.vlanId }));
+  if (request.operation.method === 'POST' && !request.target) return rows;
+  if (!rows.some(row => (row.id as string).toLowerCase() === request.target)) return null;
+  return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.show)!,
+    { site: request.site, [family.target]: request.target! }, version, ctx.peer) as Record<string, unknown>)[family.row];
 }
 
 function receipt(record: Intent, requestId: string) {
@@ -99,10 +136,13 @@ function receipt(record: Intent, requestId: string) {
 }
 
 async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> {
-  if (!record.target) return record.outcome;
-  const request = { operation: catalogue.find(op => op.id === 'OP-050')!, site: record.site, target: record.target, body: null };
+  const operation = catalogue.find(op => op.id === record.operation)!;
+  if (!record.target && !ordering[record.operation]) return record.outcome;
+  const request = { operation: operation.id === 'OP-049' ? catalogue.find(op => op.id === 'OP-050')! : operation,
+    site: record.site, target: record.target, body: null, selectors: record.selectors ?? {} };
   const state = await selectedState(ctx, request) as Record<string, unknown> | null;
-  if (record.operation === 'OP-050') return state === null && ['accepted', 'verified', 'no-op'].includes(record.outcome) ? 'verified' : record.outcome;
+  if (operation.command.startsWith('firewall policy ')) normalizeProtocols(state);
+  if (operation.method === 'DELETE') return state === null && ['accepted', 'verified', 'no-op'].includes(record.outcome) ? 'verified' : record.outcome;
   if (state && ['accepted', 'verified'].includes(record.outcome) && digest(Object.fromEntries(record.bodyKeys.map(key => [key, state[key]]))) === record.bodyHash) return 'verified';
   return record.outcome;
 }
@@ -124,15 +164,27 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
     return inspectWrite(profiles, explicit, redactor, values['request-id']!, true);
   }
   const state = await selectedState(ctx, request);
+  if (ordering[operation.id] && (new Set(request.targets).size !== request.targets.length ||
+      digest(request.targets.toSorted()) !== digest(orderedIds(state as Record<string, unknown>).toSorted()))) {
+    throw new ToolError('WRITE_CONFLICT', 'Ordering must retain exactly the selected IDs without duplicates.');
+  }
   const confirmation = digest({ binding: request.binding, state });
   if (!execute) return { preview: { outcome: 'preview', operation: operation.id, grants: request.grants,
     method: operation.method, origin: ctx.selected.profile.origin, path: `/proxy/network/integration${request.path}`,
-    site: request.site, targets: request.target ? [request.target] : [], body: request.body, confirmation,
+    site: request.site, targets: request.targets, body: request.body, confirmation,
     identity: ctx.identity, applicationVersion: ctx.api.applicationVersion },
     help: ['Repeat the same request with --execute --confirm <confirmation> --request-id <stable-id>. Concurrent vendor changes can occur after the final read.'] };
   if (values.confirm !== confirmation) throw new ToolError('CONFIRMATION_MISMATCH', 'Request, selected state or identity changed. Preview the request again.');
+  let projection = request.body;
+  if (operation.method === 'PUT' && !ordering[operation.id] && operation.id !== 'OP-052') {
+    projection = contractValidator(ctx.api.contract!).replacementProjection(
+      `#/paths/${escape(operation.path)}/put/requestBody/content/application~1json/schema`, request.body!);
+  }
+  if (['OP-031', 'OP-037'].includes(operation.id) && ctx.api.contract === '11.0.97' && !Object.hasOwn(request.body!, 'reportFlowEnabled')) {
+    projection = { ...projection, reportFlowEnabled: true };
+  }
   const record = await journal!.claim({ binding: request.binding, identity: ctx.identity, confirmation, operation: operation.id as Intent['operation'],
-    site: request.site, target: request.target, bodyHash: digest(request.body), bodyKeys: Object.keys(request.body ?? {}).sort() });
+    site: request.site, target: request.target, bodyHash: digest(projection), bodyKeys: Object.keys(projection ?? {}).sort(), selectors: request.selectors });
   try {
     // Transport calls this after peer verification and before writing HTTP bytes.
     const beforeSend = async () => {
@@ -143,7 +195,7 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
       record.outcome = 'unknown';
       await journal!.save(record);
     };
-    if (operation.id === 'OP-050' && state === null) {
+    if (operation.method === 'DELETE' && state === null) {
       record.outcome = 'no-op';
       await journal!.save(record);
       return receipt(record, values['request-id']!);
@@ -151,15 +203,19 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
     if (operation.id === 'OP-049' && (state as unknown[]).length) throw new ToolError('WRITE_CONFLICT', 'The requested VLAN is already present. A similar network cannot prove a previous creation.');
     const response = await sendMutation(ctx.selected.profile, ctx.secret, request.path, {
       method: operation.method, body: request.body === null ? undefined : JSON.stringify(request.body),
-      status: operation.id === 'OP-049' ? 201 : 200, peer: ctx.peer, beforeSend,
+      status: operation.method === 'POST' ? 201 : 200, peer: ctx.peer, beforeSend,
     });
-    if (operation.id !== 'OP-050') {
-      const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}/responses/${operation.id === 'OP-049' ? 201 : 200}/content/application~1json/schema`;
+    if (request.body) {
+      const status = operation.method === 'POST' ? 201 : 200;
+      const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}/responses/${status}/content/application~1json/schema`;
       if (contractValidator(ctx.api.contract!).validate(pointer, response).length) throw new ToolError('RESPONSE_INVALID', 'Invalid mutation acknowledgement.');
-      const target = (response as Record<string, unknown>).id;
-      if (typeof target !== 'string' || !uuid.test(target)) throw new ToolError('RESPONSE_INVALID', 'Invalid created network ID.');
-      if (request.target && target.toLowerCase() !== request.target) throw new ToolError('RESPONSE_INVALID', 'Mutation acknowledgement does not match the selected network.');
-      record.target = target.toLowerCase();
+      if (operation.method === 'POST') {
+        const target = (response as Record<string, unknown>).id;
+        if (typeof target !== 'string' || !uuid.test(target)) throw new ToolError('RESPONSE_INVALID', 'Invalid created resource ID.');
+        record.target = target.toLowerCase();
+      } else if (record.target && String((response as Record<string, unknown>).id).toLowerCase() !== record.target) {
+        throw new ToolError('RESPONSE_INVALID', 'Mutation acknowledgement does not match the selected resource.');
+      }
     }
     record.outcome = 'accepted';
     await journal!.save(record);
@@ -183,7 +239,10 @@ export async function inspectWrite(profiles: Profiles, explicit: string | undefi
   if (!reconcile) return receipt(record, requestId);
   // An ambiguous create has no trustworthy vendor ID. Similar objects prove nothing.
   const outcome = await verify(ctx, record);
-  if (!record.target) await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-048')!, { site: record.site }, ctx.api.contract!, ctx.peer);
+  if (!record.target && !ordering[record.operation]) {
+    const family = families.find(family => family.writes.includes(record.operation))!;
+    await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!, { site: record.site }, ctx.api.contract!, ctx.peer);
+  }
   await journal.observe(outcome);
   return { ...receipt({ ...record, outcome }, requestId), reconciliation: { outcome, readOnly: true } };
 }

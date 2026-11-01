@@ -253,18 +253,19 @@ Set-Acl -LiteralPath $p -AclObject $acl
       }));
       if (writeTask) {
         const { verifyWrites } = await import('./writes.ts');
-        inventoryRows.push(...await verifyWrites({
+        const harness = {
           cli: (args, code = 0, overrides = {}) => cli(args, code, { ...keys, ...overrides }, false),
-          configure, trusted, home, config, port, syntheticKey, task: writeTask.startsWith('B4.') ? 'B3.3' : writeTask,
+          configure, trusted, home, config, port, syntheticKey, task: writeTask,
           seed: handler => { requests = []; respond = handler; }, requests: () => requests,
-        }));
-        if (writeTask.startsWith('B4.')) {
+        };
+        if (writeTask === 'all' || writeTask.startsWith('B3.') || ['B4.0', 'B4.1'].includes(writeTask)) inventoryRows.push(...await verifyWrites({ ...harness, task: writeTask === 'all' || writeTask.startsWith('B4.') ? 'B3.3' : writeTask }));
+        if (writeTask === 'all' || ['B4.0', 'B4.1'].includes(writeTask)) {
           const { verifyB4 } = await import('./b4.ts');
-          inventoryRows.push(...await verifyB4({
-            cli: (args, code = 0, overrides = {}) => cli(args, code, { ...keys, ...overrides }, false),
-            configure, trusted, home, port, syntheticKey, task: writeTask,
-            seed: handler => { requests = []; respond = handler; }, requests: () => requests,
-          }));
+          inventoryRows.push(...await verifyB4({ ...harness, task: writeTask === 'all' ? 'B4.1' : writeTask }));
+        }
+        if (writeTask === 'all' || ['B4.2', 'B4.3', 'B4.4'].includes(writeTask)) {
+          const { verifyPolicyWrites } = await import('./policy-writes.ts');
+          inventoryRows.push(...await verifyPolicyWrites(harness));
         }
       }
     }

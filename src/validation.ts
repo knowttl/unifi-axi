@@ -53,6 +53,10 @@ export function compileContract(source: unknown, version: string) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Missing schema: ${pointer}`);
     return value as Schema;
   }
+  function mappedTag(schema: Schema, tag: string): string {
+    return ledger.namedProtocols.some(rule => rule.version === version && at(rule.pointer) === schema)
+      ? tag.toUpperCase().replaceAll('-', '_').replaceAll('.', '_') : tag;
+  }
   function compile(schema: Schema, pointer: string): Check {
     const cached = compiled.get(pointer);
     if (cached) return cached;
@@ -69,6 +73,8 @@ export function compileContract(source: unknown, version: string) {
     const additional = typeof schema.additionalProperties === 'object' ? compile(schema.additionalProperties, `${pointer}/additionalProperties`) : undefined;
     const mapping = new Map(Object.entries(schema.discriminator?.mapping ?? {}).map(([tag, ref]) => [tag, compile(at(ref), ref)]));
     const resolution = ledger.resolutions.find(rule => rule.version === version && rule.pointer === pointer);
+    const namedProtocol = ledger.namedProtocols.some(rule => rule.version === version && rule.pointer === pointer);
+    const protocolName = ledger.namedProtocols.some(rule => rule.version === version && `${rule.pointer}/properties/name` === pointer);
     const enumValues = resolution ? resolution.positive : schema.enum;
     const check: Check = (value, path, inherited) => {
       // NORM-001 applies only to the approved DHCP guarding request/response fields.
@@ -91,7 +97,7 @@ export function compileContract(source: unknown, version: string) {
         }
       };
       if (schema.type && !(Array.isArray(schema.type) ? schema.type : [schema.type]).some(matches)) fail('wrong type');
-      if (enumValues && !enumValues.some(member => isDeepStrictEqual(member, value))) fail('outside enum');
+      if (enumValues && !enumValues.some(member => isDeepStrictEqual(member, protocolName && typeof value === 'string' ? value.toLowerCase() : value))) fail('outside enum');
       if (typeof value === 'number') {
         if (schema.minimum !== undefined && value < schema.minimum) fail('below minimum');
         if (schema.maximum !== undefined && value > schema.maximum) fail('above maximum');
@@ -124,7 +130,10 @@ export function compileContract(source: unknown, version: string) {
       }
       if (schema.discriminator && !inherited) {
         const tag = object ? (value as Record<string, unknown>)[schema.discriminator.propertyName] : undefined;
-        const selected = typeof tag === 'string' ? mapping.get(tag) : undefined;
+        const selected = typeof tag === 'string' ? mapping.get(mappedTag(schema, tag)) : undefined;
+        if (namedProtocol && (!selected || !at(`${pointer}/properties/name`).enum?.includes(typeof tag === 'string' ? tag.toLowerCase() : tag))) {
+          throw new ToolError('CONTRACT_CONFLICT', `Unknown named protocol at ${pointer}.`);
+        }
         if (!selected) fail(`missing or unmapped discriminator ${schema.discriminator.propertyName}`);
         else errors.push(...selected(value, path, false));
       }
@@ -145,6 +154,25 @@ export function compileContract(source: unknown, version: string) {
   }
   return {
     validate(pointer: string, value: unknown): string[] { return compile(at(pointer), pointer)(value, '', false); },
+    replacementProjection(pointer: string, body: Record<string, unknown>): Record<string, unknown> {
+      const properties: Record<string, Schema> = {};
+      const visited = new Set<Schema>();
+      function visit(schema: Schema): void {
+        if (visited.has(schema)) return;
+        visited.add(schema);
+        if (schema.$ref) visit(at(schema.$ref));
+        for (const parent of schema.allOf ?? []) visit(parent);
+        Object.assign(properties, schema.properties);
+        if (schema.discriminator) {
+          const tag = body[schema.discriminator.propertyName];
+          const ref = typeof tag === 'string' ? schema.discriminator.mapping[mappedTag(schema, tag)] : undefined;
+          if (ref) visit(at(ref));
+        }
+      }
+      visit(at(pointer));
+      return { ...Object.fromEntries(Object.entries(properties).filter(([, schema]) => !schema.deprecated)
+        .map(([key, schema]) => [key, schema.default])), ...body };
+    },
     validateRequest(pointer: string, value: unknown): string[] {
       const errors = compile(at(pointer), pointer)(value, '', false);
       // Requests may contain only fields declared by the selected contract and subtype.
@@ -153,7 +181,7 @@ export function compileContract(source: unknown, version: string) {
         seen.add(schema);
         const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
         const tag = schema.discriminator && record[schema.discriminator.propertyName];
-        const subtype = typeof tag === 'string' ? schema.discriminator?.mapping[tag] : undefined;
+        const subtype = typeof tag === 'string' ? schema.discriminator?.mapping[mappedTag(schema, tag)] : undefined;
         return Object.assign({}, schema.$ref ? fields(at(schema.$ref), item, seen) : {},
           ...(schema.allOf ?? []).map(parent => fields(parent, item, seen)),
           schema.properties ?? {}, subtype ? fields(at(subtype), item, seen) : {});

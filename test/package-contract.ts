@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decode } from '@toon-format/toon';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -13,7 +13,7 @@ const networkLog = join(temporary, 'network-attempts');
 const guard = fileURLToPath(new URL('./fixtures/no-network.mjs', import.meta.url));
 const packageEnv = {
   ...process.env,
-  NODE_OPTIONS: `--import=${guard}`,
+  NODE_OPTIONS: `--import="${pathToFileURL(guard).href}"`,
   UNIFI_AXI_TEST_NETWORK_LOG: networkLog,
 };
 const env = { ...packageEnv, HOME: temporary, XDG_CONFIG_HOME: temporary };
@@ -73,9 +73,8 @@ try {
       `Secret material or local path in ${file}`);
     assert.ok(!content.includes(root) && !content.includes(temporary), `Build path leaked in ${file}`);
   }
-  const launcher = join(prefix, 'node_modules/.bin/unifi-axi');
-  assert.equal(command(launcher, ['--version'], temporary), `${source.version}\n`);
-  const help = decode(command(launcher, ['--help'], temporary)) as { command: string };
+  assert.equal(command(process.execPath, [pnpm, '--dir', prefix, 'exec', 'unifi-axi', '--version'], temporary), `${source.version}\n`);
+  const help = decode(command(process.execPath, [pnpm, '--dir', prefix, 'exec', 'unifi-axi', '--help'], temporary)) as { command: string };
   assert.equal(help.command, 'unifi-axi');
   // Resolve from the consumer directory so the checkout cannot satisfy imports.
   command(process.execPath, ['--input-type=module', '-e', `

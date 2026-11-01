@@ -244,6 +244,8 @@ Updates replace the selected resource; deletes require `--dns-policy-id` or `--t
 DNS bodies support `A_RECORD`, `AAAA_RECORD`, `CNAME_RECORD`, `FORWARD_DOMAIN`, `MX_RECORD`, `SRV_RECORD` and `TXT_RECORD`.
 Traffic lists support `IPV4_ADDRESSES`, `IPV6_ADDRESSES` and `PORTS`, with the entry types and fields declared by the selected contract.
 Unknown fields, missing required values and invalid nested entry tags fail before mutation.
+Traffic-list creates and updates also reject invalid or mismatched address families, invalid CIDR prefixes and reversed address or port ranges before preview or dispatch.
+Invalid entries return `INVALID_ARGUMENT` without sending a mutation.
 
 ## Wi-Fi broadcasts and vouchers
 

@@ -32,6 +32,7 @@ interface Contract {
 export const versions = ['10.6.109', '11.0.97'] as const;
 
 export const writeOperations = new Set(['OP-049', 'OP-050', 'OP-052', 'OP-008', 'OP-010', 'OP-011', 'OP-013',
+  'OP-016', 'OP-019', 'OP-020', 'OP-022', 'OP-023',
   'OP-031', 'OP-033', 'OP-034', 'OP-036', 'OP-037', 'OP-039', 'OP-040', 'OP-042',
   'OP-043', 'OP-045', 'OP-046', 'OP-070', 'OP-071', 'OP-073',
   'OP-026', 'OP-027', 'OP-029', 'OP-062', 'OP-063', 'OP-065']);

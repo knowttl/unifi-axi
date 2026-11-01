@@ -11,6 +11,7 @@ interface Mutation {
   method: string;
   body: string | undefined;
   status: number;
+  bodyless?: boolean;
   peer: PeerIdentity;
   beforeSend: () => Promise<void>;
 }
@@ -129,7 +130,7 @@ async function requestJson(profile: Profile, apiKey: string, path: string, expir
         });
         response.once('error', reject);
         response.once('end', () => {
-          if (mutation && mutation.body === undefined && size === 0) { resolve(null); return; }
+          if (mutation?.bodyless || (mutation && mutation.body === undefined && size === 0)) { resolve(null); return; }
           try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new ToolError('RESPONSE_INVALID', 'API response is not JSON.')); }
         });
       });

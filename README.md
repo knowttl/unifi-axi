@@ -273,12 +273,13 @@ Never issue a new generation request to recover an existing code.
 
 ## Guest access and device actions
 
-`client action` accepts `AUTHORIZE_GUEST_ACCESS` and `UNAUTHORIZE_GUEST_ACCESS` in a protected `--body-file`.
+`client action --client-id <uuid>` accepts `AUTHORIZE_GUEST_ACCESS` and `UNAUTHORIZE_GUEST_ACCESS` in a protected `--body-file`.
 Authorization accepts the contract's optional time, data quota and upload/download limits.
+Guest confirmations exclude `access.authorization.usage` counters from the selected client state; authorization changes still invalidate confirmation at execution or final dispatch.
 Grant `executeConnectedClientAction` plus `executeConnectedClientAction:<action>` separately for each action.
 `device adopt` accepts `macAddress` and `ignoreDeviceLimit` in its body and requires `adoptDevice`.
 Its confirmation includes the matching pending and adopted device state, and its receipt retains the returned device UUID.
-Device writes currently support 10.6.109; 11.0.97 remains refused by the unresolved CF-007 PoE schema conflict during the required device-state read.
+Device writes require device-state reads and inherit their [version-specific contract gates](#inventory-clients-networks-and-references).
 `device remove --device-id <uuid>` requires `removeDevice`.
 `device action` with `RESTART` requires `executeAdoptedDeviceAction` plus `executeAdoptedDeviceAction:RESTART`.
 `device interfaces ports action --device-id <uuid> --port-idx <integer>` with `POWER_CYCLE` requires `executePortAction` plus `executePortAction:POWER_CYCLE`.

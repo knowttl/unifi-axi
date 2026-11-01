@@ -9,7 +9,7 @@ Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
 `info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
 Read coverage includes [inventory and networks](#inventory-clients-networks-and-references) and [policies, vouchers, Wi-Fi and switching](#policies-vouchers-wi-fi-and-switching), subject to the documented contract gates.
-Network creation and deletion support [previews and explicitly granted execution](#network-write-foundation).
+Network creation, update and deletion support [previews and explicitly granted execution](#network-write-foundation).
 Use `unifi-axi commands` for each operation's implementation status; unimplemented operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
 All 32 live mutation probes remain unrun.
@@ -140,11 +140,22 @@ Empty switching lists remain empty; missing details return an explicit upstream 
 `firewall policy order show` requires both `--source-firewall-zone-id` and `--destination-firewall-zone-id` and returns ordering for that zone pair.
 Zone details include their network IDs.
 Firewall policy `list` and `show` remain gated by unresolved named-protocol conflicts CF-002 through CF-004 on 10.6.109 and CF-008 through CF-010 on 11.0.97.
-Wi-Fi broadcast `show` remains gated by rate enum conflicts CF-005/CF-006 and CF-011/CF-012 respectively.
+Wi-Fi broadcast `show` validates radio rates using the reviewed exact-field numeric enum resolutions CF-005/CF-006 and CF-011/CF-012 respectively.
 These structural conflicts block the reachable response schema even when the affected optional field is absent or a list is empty.
 These reads return `CONTRACT_CONFLICT` diagnostics naming the selected version, conflict IDs and source pointers.
 `wifi broadcast list`, policy ordering and zone reads remain available.
 No source conflict is silently normalized.
+
+`hotspot voucher list/show` and `wifi broadcast list/show` accept `--secret-output <absolute-path>` for standalone protected response export.
+The destination must be new and inside an existing private directory.
+The file contains JSON entries with a resource ID, an allowlisted response path and its secret value.
+Voucher codes and personal Wi-Fi passphrases, including WPA2 personal preshared keys, are the only exported values.
+Wi-Fi list exports fetch the documented detail for each listed ID.
+Authentication keys remain redacted even at an allowlisted location.
+Ordinary output contains IDs and a delivery receipt only.
+An existing destination is never replaced, and a failed read removes the reserved file so the read can be repeated with a new destination.
+Hosted execution refuses local exports before resolving a profile or contacting the vendor.
+Mutation-time secret delivery remains pending B4.8.
 
 Voucher `code` fields and Wi-Fi `passphrase` fields are replaced with `[REDACTED]` in default output.
 Diagnostic `error.code` fields remain visible.
@@ -152,15 +163,17 @@ Voucher lists use the documented default limit of 100; other lists use their doc
 
 ## Network write foundation
 
-`network create --body-file <path>` previews an unmanaged network creation.
-The initial body supports `name`, `management: "UNMANAGED"`, `enabled`, `vlanId` and optional schema-valid `dhcpGuarding`.
-Gateway and switch creation variants remain pending.
+`network create --body-file <path>` previews network creation.
+`network update --network-id <id> --body-file <path>` previews a complete replacement using PUT.
+Both support the selected contract's `GATEWAY`, `SWITCH` and `UNMANAGED` variants, including nested DHCP, IPv6 and NAT settings.
+Requests reject undeclared fields, unmapped tags and missing required subtype fields.
+Optional `dhcpGuarding` accepts omission, a schema-valid configuration or explicit null to disable it under NORM-001.
 `network delete --network-id <id>` previews deletion of that exact network.
 Omitted `--force` and `--force false` normalize to the same request; `--force true` needs a new preview.
 Request site and network UUIDs normalize to lowercase before binding and dispatch; resource identity comparisons ignore UUID letter case.
-Both commands select a site through `--site`, the profile or unambiguous discovery.
+All three commands select a site through `--site`, the profile or unambiguous discovery.
 
-Execution requires `writes.allowWrites: true` and exact vendor grants in `writes.operations`: `createNetwork` plus `createNetwork:UNMANAGED` for creation, or `deleteNetwork` for deletion.
+Execution requires `writes.allowWrites: true` and exact vendor grants in `writes.operations`: `createNetwork` plus `createNetwork:<management>` for creation, `updateNetwork` plus `updateNetwork:<management>` for update, or `deleteNetwork` for deletion.
 Legacy `OP-049`/`OP-050` entries are readable profile syntax but do not authorize execution.
 `UNIFI_AXI_READ_ONLY=true` or `1` overrides all grants.
 Repeat the previewed command with `--execute --confirm <confirmation> --request-id <stable-id>`.
@@ -314,7 +327,8 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10 and B3.1 through B3.3 selectors, plus the default implemented suite, are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0/B4.1 selectors, plus the default implemented suite, are supported now.
+The B4 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
 The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
 B3 processes run under an outbound network deny allowing only their synthetic vendor listener.
 Hosted journeys remain opt-in and emit an explicit skip reason when no frozen fixture is configured.

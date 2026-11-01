@@ -101,6 +101,26 @@ export class PrivateFiles {
     } finally { await handle.close(); }
   }
 
+  async create(path: string, content: () => Promise<string>): Promise<void> {
+    // Reserve exclusively before reading secrets; never replace an existing destination.
+    await this.verifyDirectory(dirname(path));
+    const handle = await open(path, 'wx', 0o600).catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ToolError('OUTPUT_EXISTS', 'The secret output destination already exists. Choose a new file.');
+      throw error;
+    });
+    try {
+      if (this.platform === 'win32') {
+        this.acl(path, 'restrict', false);
+        this.acl(path, 'verify', false);
+      }
+      await handle.writeFile(await content(), 'utf8');
+      await handle.sync();
+    } catch (error) {
+      await unlink(path);
+      throw error;
+    } finally { await handle.close(); }
+  }
+
   async write(path: string, content: string): Promise<void> {
     const parent = dirname(path);
     await mkdir(parent, { recursive: true, mode: 0o700 });

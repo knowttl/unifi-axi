@@ -6,6 +6,10 @@
     "negative": "An unmapped tag or missing required selected field fails."
   },
   "resolutions": [
+{"id":"CF-005","version":"10.6.109","pointer":"#/components/schemas/IntegrationWifiBasicDataRateConfigurationDto/properties/2.4","sourceHash":"2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c","fieldHash":"c620c4d708e92264bdb2d9609ed53b4b07ea6e4f1cd5604744a5ec1da4836fd0","interpretation":"Validate exactly these numeric enum members at this integer/int32 field. Reject strings and preserve source captures. No general enum coercion.","reviewer":"B4.0 exact-field numeric enum normalization approved by firstmate","positive":[1000,2000,5500,6000,9000,11000,12000,24000],"negative":["6000",0,1,6001]},
+{"id":"CF-006","version":"10.6.109","pointer":"#/components/schemas/IntegrationWifiBasicDataRateConfigurationDto/properties/5","sourceHash":"2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c","fieldHash":"f20bd91cd07460124898fef3f795008cbaef989712c226fdc68d4c27c7d1d82d","interpretation":"Validate exactly these numeric enum members at this integer/int32 field. Reject strings and preserve source captures. No general enum coercion.","reviewer":"B4.0 exact-field numeric enum normalization approved by firstmate","positive":[6000,9000,12000,24000],"negative":["6000",0,1,6001]},
+{"id":"CF-011","version":"11.0.97","pointer":"#/components/schemas/IntegrationWifiBasicDataRateConfigurationDto/properties/2.4","sourceHash":"0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66","fieldHash":"c620c4d708e92264bdb2d9609ed53b4b07ea6e4f1cd5604744a5ec1da4836fd0","interpretation":"Validate exactly these numeric enum members at this integer/int32 field. Reject strings and preserve source captures. No general enum coercion.","reviewer":"B4.0 exact-field numeric enum normalization approved by firstmate","positive":[1000,2000,5500,6000,9000,11000,12000,24000],"negative":["6000",0,1,6001]},
+{"id":"CF-012","version":"11.0.97","pointer":"#/components/schemas/IntegrationWifiBasicDataRateConfigurationDto/properties/5","sourceHash":"0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66","fieldHash":"f20bd91cd07460124898fef3f795008cbaef989712c226fdc68d4c27c7d1d82d","interpretation":"Validate exactly these numeric enum members at this integer/int32 field. Reject strings and preserve source captures. No general enum coercion.","reviewer":"B4.0 exact-field numeric enum normalization approved by firstmate","positive":[6000,9000,12000,24000],"negative":["6000",0,1,6001]},
     {
       "id": "CF-001",
       "version": "10.6.109",
@@ -16,6 +20,26 @@
       "reviewer": "B2.1 approved PoE resolution",
       "positive": [1, 2, 3, 4],
       "negative": ["2", 0, 5]
+    }
+  ],
+  "nullRequests": [
+    {
+      "id": "NORM-001", "version": "10.6.109",
+      "pointer": "#/components/schemas/Create or update Network/properties/dhcpGuarding",
+      "sourceHash": "2356b910f76c175db9a22ce18070c2c40af02d9843ca67628410a5afbfc5086c",
+      "fieldHash": "6253738ff5edd0d06253c8efb45cee574c397334175d8dd405908d956ed9f0e3",
+      "interpretation": "Accept omitted or explicit null as disabled at this request field only. Preserve the value without coercion.",
+      "reviewer": "B4.1 approved request-side NORM-001 specification",
+      "positive": [null], "negative": ["disabled", false]
+    },
+    {
+      "id": "NORM-001", "version": "11.0.97",
+      "pointer": "#/components/schemas/Create or update Network/properties/dhcpGuarding",
+      "sourceHash": "0828aa9f017cce92cd035429c7e19c933d0b3387c561aac17c468b4c2ca8be66",
+      "fieldHash": "6253738ff5edd0d06253c8efb45cee574c397334175d8dd405908d956ed9f0e3",
+      "interpretation": "Accept omitted or explicit null as disabled at this request field only. Preserve the value without coercion.",
+      "reviewer": "B4.1 approved request-side NORM-001 specification",
+      "positive": [null], "negative": ["disabled", false]
     }
   ],
   "nullResponses": [

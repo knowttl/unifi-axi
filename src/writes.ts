@@ -8,10 +8,11 @@ import { ToolError, type Redactor } from './security.js';
 import { contractValidator } from './validation.js';
 import { sendMutation, type PeerIdentity } from './transport.js';
 import { digest, WriteJournal, type Intent } from './write-journal.js';
+import { PrivateFiles } from './private-file.js';
 
 const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-export const foundationWrites = new Set(['OP-049', 'OP-050']);
+export const foundationWrites = new Set(['OP-049', 'OP-050', 'OP-052']);
 
 function policy(selected: Selection, grants: string[]): void {
   if (!writeAllowed(selected.profile, grants)) {
@@ -62,20 +63,16 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   }
   let body: Record<string, unknown> | null = null;
   const grants = [operation.vendorOperationId];
-  if (operation.id === 'OP-049') {
-    if (!values['body-file']) throw new ToolError('INVALID_ARGUMENT', 'network create requires --body-file <path>.');
+  if (operation.id !== 'OP-050') {
+    if (!values['body-file']) throw new ToolError('INVALID_ARGUMENT', 'Network creation and update require --body-file <path>.');
     let parsed: unknown;
-    try { parsed = JSON.parse(await readFile(values['body-file'], 'utf8')); }
+    try { parsed = JSON.parse(await new PrivateFiles().read(values['body-file'], true)); }
     catch { throw new ToolError('INVALID_ARGUMENT', 'Unable to read a JSON request body file.'); }
-    if (validator.validate(`${pointer}/requestBody/content/application~1json/schema`, parsed).length) {
+    if (validator.validateRequest(`${pointer}/requestBody/content/application~1json/schema`, parsed).length) {
       throw new ToolError('INVALID_ARGUMENT', 'Request body does not match the selected Network contract.');
     }
     body = parsed as Record<string, unknown>;
-    if (body.management !== 'UNMANAGED') throw new ToolError('NOT_IMPLEMENTED', 'The write foundation supports UNMANAGED network creation only. Other variants remain pending.');
-    if (Object.keys(body).some(key => !['name', 'management', 'enabled', 'vlanId', 'dhcpGuarding'].includes(key))) {
-      throw new ToolError('INVALID_ARGUMENT', 'Request contains fields outside the unmanaged network contract.');
-    }
-    grants.push(`${operation.vendorOperationId}:UNMANAGED`);
+    grants.push(`${operation.vendorOperationId}:${String(body.management)}`);
   }
   query.sort();
   if (query.size) path += `?${query}`;
@@ -156,11 +153,12 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
       method: operation.method, body: request.body === null ? undefined : JSON.stringify(request.body),
       status: operation.id === 'OP-049' ? 201 : 200, peer: ctx.peer, beforeSend,
     });
-    if (operation.id === 'OP-049') {
-      const pointer = `#/paths/${escape(operation.path)}/post/responses/201/content/application~1json/schema`;
+    if (operation.id !== 'OP-050') {
+      const pointer = `#/paths/${escape(operation.path)}/${operation.method.toLowerCase()}/responses/${operation.id === 'OP-049' ? 201 : 200}/content/application~1json/schema`;
       if (contractValidator(ctx.api.contract!).validate(pointer, response).length) throw new ToolError('RESPONSE_INVALID', 'Invalid mutation acknowledgement.');
       const target = (response as Record<string, unknown>).id;
       if (typeof target !== 'string' || !uuid.test(target)) throw new ToolError('RESPONSE_INVALID', 'Invalid created network ID.');
+      if (request.target && target.toLowerCase() !== request.target) throw new ToolError('RESPONSE_INVALID', 'Mutation acknowledgement does not match the selected network.');
       record.target = target.toLowerCase();
     }
     record.outcome = 'accepted';

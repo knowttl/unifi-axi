@@ -8,6 +8,7 @@ import { application, sites, selectSite } from './application.js';
 import { readOperation } from './reads.js';
 import { setup } from './integrations.js';
 import { foundationWrites, inspectWrite, writeOperation } from './writes.js';
+import { exportResponse, secretReads } from './secret-output.js';
 
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
@@ -31,6 +32,7 @@ function flagsFor(operation?: Operation): Flag[] {
   const flags: Flag[] = [{ name: 'help', type: 'switch', required: false }];
   if (!operation) return flags;
   flags.push({ name: 'profile', type: 'string', required: false }, { name: 'config', type: 'string', required: false });
+  if (secretReads.has(operation.id)) flags.push({ name: 'secret-output', type: 'string', required: false });
   for (const parameter of operation.contracts[0]!.parameters) {
     flags.push({ name: parameterFlag(parameter.name), type: parameter.schema.type ?? 'string',
       required: parameter.required ?? false, default: parameter.schema.default, schema: parameter.schema });
@@ -112,7 +114,7 @@ export async function main(args: string[]): Promise<number> {
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
-        output: foundationWrites.has(operation.id) ? 'Preview by default. Execution requires exact grants, matching confirmation and a stable request ID. Creation currently supports UNMANAGED networks only.' : operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract.' : 'No vendor output until implemented. This operation fails before network access.',
+        output: foundationWrites.has(operation.id) ? 'Preview by default. Execution requires exact grants, matching confirmation and a stable request ID.' : operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract.' : 'No vendor output until implemented. This operation fails before network access.',
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
         })), examples: examplesFor(operation) });
@@ -176,6 +178,7 @@ export async function main(args: string[]): Promise<number> {
     let profileContext = values.profile ? ` --profile ${quote(values.profile)}` : '';
     const configContext = values.config ? ` --config ${quote(values.config)}` : '';
     try {
+      if (values['secret-output'] && process.env.UNIFI_AXI_HOSTED === '1') throw new ToolError('HOSTED_DENIED', 'Local secret export is unavailable in hosted execution.');
       const path = configPath(values.config);
       const profiles = new Profiles(path);
       if (command === 'config path') return output({ config: { path } });
@@ -224,6 +227,7 @@ export async function main(args: string[]): Promise<number> {
         if (operation.path.includes('{siteId}') && !inputs.site) {
           inputs.site = selected.profile.siteId ?? selectSite((await sites(selected.profile, secret, {}, result.api.contract)).sites);
         }
+        if (values['secret-output']) return emit(await exportResponse(selected.profile, secret, operation, inputs, result.api.contract, redactor));
         return emit({ api, ...(inputs.site ? { selectedSite: inputs.site } : {}),
           ...await readOperation(selected.profile, secret, operation, inputs, result.api.contract) });
       }

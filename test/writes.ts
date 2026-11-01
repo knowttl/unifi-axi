@@ -11,7 +11,7 @@ interface Result {
   error: { code: string };
   reconciliation: { outcome: string; readOnly: boolean };
 }
-interface Harness {
+export interface Harness {
   cli: (args: string[], code?: number, env?: Record<string, string>) => Promise<Result>;
   configure: (profiles: Record<string, Profile>) => void;
   trusted: Profile;

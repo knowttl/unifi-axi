@@ -7,7 +7,8 @@ import type { Profile } from '../src/profiles.js';
 
 interface Result {
   preview: { confirmation: string; identity: string; body: Record<string, unknown> | null };
-  write: { outcome: string; auditId: string };
+  write: { outcome: string; auditId: string; target: string | null; targets?: string[] };
+  delivery?: { path: string; delivered: boolean };
   error: { code: string };
   reconciliation: { outcome: string; readOnly: boolean };
 }

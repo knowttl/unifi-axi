@@ -267,6 +267,10 @@ Set-Acl -LiteralPath $p -AclObject $acl
           const { verifyPolicyWrites } = await import('./policy-writes.ts');
           inventoryRows.push(...await verifyPolicyWrites(harness));
         }
+        if (writeTask === 'all' || ['B4.7', 'B4.8'].includes(writeTask)) {
+          const { verifyWifiVouchers } = await import('./wifi-vouchers.ts');
+          inventoryRows.push(...await verifyWifiVouchers(harness));
+        }
       }
     }
   } finally {

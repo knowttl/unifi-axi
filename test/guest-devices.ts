@@ -167,7 +167,7 @@ export async function verifyGuestDevices(h: Harness) {
           state = [neighbour, { ...client, access: { type: 'GUEST', authorized: true, authorization } }];
           usageReads.length = 0;
           changeAuthorizationAt = changedAt;
-          const previousSent = sent.length;
+          const previousSent: number = sent.length;
           const preview = await run(args);
           const result = await run(execute(preview.preview.confirmation, stage), error ? 1 : 0);
           if (error) {

@@ -207,11 +207,13 @@ try {
     integrations: ['claude', 'codex', 'opencode'], nativeWindows: 'PENDING', liveCommissioning: 'PENDING' });
   if (args[1] === undefined || ['B1.2a', 'B2.0'].includes(args[1])) rows.push({ task: 'B2.0', acceptance: 'STEP-B2.0',
     operation: ['OP-001', 'OP-002'], version: ['10.6.109', '11.0.97'], direction: 'standalone-synthetic', status: 'passed-on-current-platform' });
-  const blockers = rows.filter(row => row.status === 'blocked-by-CF-007');
-  console.log(JSON.stringify({ task: args[1] ?? 'B4.11', result: 'passed-on-current-platform', platform: process.platform,
+  const blockers = rows.filter(row => row.status === 'blocked-by-CF-007' || row.status === 'known-contract-conflict');
+  const pending = rows.filter(row => row.status === 'pending-native-windows');
+  const result = blockers.length ? 'blocked' : pending.length ? 'pending' : 'passed-on-current-platform';
+  console.log(JSON.stringify({ task: args[1] ?? 'B4.11', result, platform: process.platform,
     b4Closure: { status: blockers.length ? 'blocked-by-CF-007' : 'not-evaluated',
-      reason: 'Device paths on 11.0.97 remain refused; native Windows and live commissioning remain pending.', blockers },
-    nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING', node: process.version,
+      reason: 'CF-007 (issue #33) blocks device paths on 11.0.97; native Windows and live commissioning remain pending.', blockers },
+    nativeWindows: 'PENDING', node: process.version,
     packageIntegritySha256: integrity, executable, sourceHashes,
     inputHashes: { catalogue: sha(readFileSync(join(root, 'test/fixtures/catalogue.json'))),
       lockfile: sha(readFileSync(join(root, 'pnpm-lock.yaml'))),
@@ -227,6 +229,7 @@ try {
       bodyless: sha(readFileSync(join(root, 'test/bodyless.ts'))),
       writeGuard: sha(readFileSync(join(root, 'test/fixtures/write-guard.ts'))) },
     timings, rows, futureTasks: 'unimplemented', liveMutationProbes: '32 unrun' }, null, 2));
+  if (result !== 'passed-on-current-platform') process.exitCode = 1;
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }

@@ -22,7 +22,6 @@ const routes = [
 ];
 
 export async function verifyBodyless(h: Harness) {
-  if (process.platform === 'win32') return [{ task: 'B4.11', status: 'pending-native-windows' }];
   const rows: Row[] = [];
   const bodyFile = join(h.home, 'bodyless-action.json');
   const run = (args: string[], code = 0) => h.cli(args, code, { UNIFI_AXI_WRITE_LOG: join(h.home, 'bodyless-journal') });
@@ -77,7 +76,7 @@ export async function verifyBodyless(h: Harness) {
           assert.deepEqual(sent, []);
           rows.push({ task: 'B4.11', acceptance: 'NORM-002', operation: route.operation, version,
             status: 'blocked-by-CF-007', mode });
-          break;
+          continue;
         }
         const confirmation = (await run(args)).preview.confirmation;
         assert.deepEqual(sent, [], 'Preview never mutates');

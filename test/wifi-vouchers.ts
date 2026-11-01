@@ -26,7 +26,7 @@ const macFormats = ['UPPERCASE_NOT_SEPARATED', 'UPPERCASE_DASH_SEPARATED', 'UPPE
 const securityTypes = ['OPEN', 'WPA2_PERSONAL', 'WPA2_ENTERPRISE', 'WPA2_WPA3_PERSONAL', 'WPA2_WPA3_ENTERPRISE', 'WPA3_PERSONAL', 'WPA3_ENTERPRISE'];
 const networks = [{ type: 'NATIVE' }, { type: 'SPECIFIC', networkId: neighbourId }];
 const deviceFilters = [{ type: 'DEVICES', deviceIds: [id] }, { type: 'DEVICE_TAGS', deviceTagIds: [neighbourId] }];
-const wifiVariants = ['STANDARD', 'IOT_OPTIMIZED'].flatMap(type => securityTypes.flatMap(securityType =>
+export const wifiVariants = ['STANDARD', 'IOT_OPTIMIZED'].flatMap(type => securityTypes.flatMap(securityType =>
   [...macFormats, macFormats[0]!, macFormats[1]!].map((macAddressFormat, index) => {
     const nasId = index < 4 ? { type: 'DERIVED', source: ['DEVICE_MAC_ADDRESS', 'DEVICE_NAME', 'SITE_NAME', 'BSSID'][index] } :
       { type: 'USER_DEFINED', value: 'synthetic-nas' };

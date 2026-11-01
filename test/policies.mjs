@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { firewallRecord } from './policy-fixtures.ts';
+import { firewallRecord, firewallVariants } from './policy-fixtures.ts';
+import { wifiVariants } from './wifi-vouchers.ts';
 
 const site = '9361553d-e20d-45b8-a516-6948ab010011';
 const otherSite = '5925a212-9b6e-402b-a675-c658ab010022';
@@ -115,6 +116,20 @@ export async function verifyPolicies({ cli, seed }) {
       }
       rows.push({ command, version, status: 'passed', direction: 'filtered-list-and-details' });
     }
+    for (const [command, key, detailKey, flag, body, origins] of [
+      ['acl-rule', 'aclRules', 'aclRule', 'acl-rule-id', aclRules[0], ['USER_DEFINED', 'DERIVED']],
+      ['firewall zone', 'firewallZones', 'firewallZone', 'firewall-zone-id',
+        { id, name: 'Synthetic zone', networkIds: [secondId] }, ['USER_DEFINED', 'SYSTEM_DEFINED']],
+    ]) {
+      for (const origin of origins) {
+        const record = { ...body, metadata: { origin } };
+        serve(url => url.pathname.endsWith(`/${id}`) ? record :
+          { offset: 0, limit: 25, count: 1, totalCount: 1, data: [record] });
+        assert.deepEqual((await run(`${command} list`))[key], [record]);
+        assert.deepEqual((await run(`${command} show`, [`--${flag}`, id]))[detailKey], record);
+        rows.push({ task: 'B4.11', command, version, origin, status: 'passed', direction: 'public-metadata-variants' });
+      }
+    }
     const orderedAclRuleIds = [aclRules[3].id, aclRules[0].id, aclRules[2].id, aclRules[1].id];
     serve(url => {
       assert.equal(url.pathname, `/proxy/network/integration/v1/sites/${site}/acl-rules/ordering`);
@@ -172,6 +187,43 @@ export async function verifyPolicies({ cli, seed }) {
     for (const record of [wifi, { ...detail, basicDataRateKbpsByFrequencyGHz: { '2.4': '2000', '5': 6000 } }]) {
       serve(() => record);
       assert.equal((await run('wifi broadcast show', ['--wifi-broadcast-id', id], 1)).error.code, 'RESPONSE_INVALID');
+    }
+    for (const [command, path, key, detailKey, flag, variants] of [
+      ['firewall policy', 'firewall/policies', 'firewallPolicies', 'firewallPolicy', 'firewall-policy-id', firewallVariants(version)],
+      ['wifi broadcast', 'wifi/broadcasts', 'wifiBroadcasts', 'wifiBroadcast', 'wifi-broadcast-id', wifiVariants],
+    ]) {
+      const records = variants.map((body, index) => ({ ...body,
+        id: `8c850c83-1111-4111-8111-${String(index + 1).padStart(12, '0')}`,
+        ...(command === 'firewall policy' ? { index } : {}),
+        metadata: { origin: ['USER_DEFINED', 'DERIVED', command === 'firewall policy' ? 'SYSTEM_DEFINED' : 'ORCHESTRATED'][index % 3] } }));
+      const overviews = command === 'firewall policy' ? records : records.map(record => Object.fromEntries([
+        ...Object.entries(record).filter(([key]) => ['id', 'name', 'type', 'enabled', 'metadata', 'network',
+          'broadcastingDeviceFilter', 'broadcastingFrequenciesGHz', 'hotspotConfiguration'].includes(key)),
+        ['securityConfiguration', { type: record.securityConfiguration.type }],
+      ]));
+      const base = `/proxy/network/integration/v1/sites/${site}/${path}`;
+      serve(url => {
+        if (url.pathname === base) {
+          const offset = Number(url.searchParams.get('offset'));
+          const limit = Number(url.searchParams.get('limit'));
+          const data = overviews.slice(offset, offset + limit);
+          return { offset, limit, count: data.length, totalCount: overviews.length, data };
+        }
+        const selected = records.find(record => url.pathname === `${base}/${record.id}`);
+        assert.ok(selected, url.pathname);
+        return selected;
+      });
+      assert.deepEqual((await run(`${command} list`))[key], overviews);
+      for (const record of records) {
+        const expected = structuredClone(record);
+        if (command === 'wifi broadcast') {
+          if (expected.securityConfiguration.passphrase) expected.securityConfiguration.passphrase = '[REDACTED]';
+          for (const key of expected.securityConfiguration.presharedKeys ?? []) key.passphrase = '[REDACTED]';
+        }
+        assert.deepEqual((await run(`${command} show`, [`--${flag}`, record.id]))[detailKey], expected);
+        rows.push({ task: 'B4.11', command, version, variant: record.id, type: record.type,
+          status: 'passed', direction: 'public-list-and-detail-variants' });
+      }
     }
     rows.push({ command: 'firewall policy show', version, status: 'passed', direction: 'reviewed-protocol-case-resolution' },
       { command: 'hotspot voucher and wifi broadcast list', version, status: 'passed', direction: 'redacted' });

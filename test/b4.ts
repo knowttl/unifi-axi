@@ -10,7 +10,7 @@ const metadata = { origin: 'USER_DEFINED' };
 const base = { name: 'Synthetic network', management: 'UNMANAGED', enabled: true, vlanId: 42 };
 const neighbour = { ...base, name: 'Untouched network', id: other, vlanId: 7, default: false, metadata };
 const ipv4 = { autoScaleEnabled: false, hostIpAddress: '192.0.2.1', prefixLength: 24, additionalHostIpSubnets: ['198.51.100.1/24'] };
-const bodies = [
+export const networkBodies = [
   { ...base, dhcpGuarding: null },
   { ...base, management: 'SWITCH', deviceId: other, cellularBackupEnabled: false, isolationEnabled: true,
     ipv4Configuration: ipv4, dhcpGuarding: { trustedDhcpServerIpAddresses: ['192.0.2.53'] } },
@@ -130,7 +130,7 @@ export async function verifyB4(h: Harness) {
     }
     h.configure({ lab: profile });
     const bodyFile = join(h.home, 'b4-network.json');
-    for (const [index, body] of bodies.entries()) {
+    for (const [index, body] of networkBodies.entries()) {
       const variant = `${body.management}-${index}`;
       const responseMetadata = { origin: ['USER_DEFINED', 'SYSTEM_DEFINED', 'ORCHESTRATED'][index % 3]! };
       let state: Record<string, unknown>[] = [neighbour];

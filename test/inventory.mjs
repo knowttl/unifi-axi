@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { networkBodies } from './b4.ts';
 
 const site = '9361553d-e20d-45b8-a516-6948ab010011';
 const otherSite = '5925a212-9b6e-402b-a675-c658ab010022';
@@ -136,6 +137,64 @@ export async function verifyInventory({ cli, seed }) {
     for (const variant of variants) {
       serve(() => ({ ...variant, dhcpGuarding: null }));
       assert.deepEqual((await cli(['network', 'show', '--site', site, '--network-id', id])).network, { ...variant, dhcpGuarding: null });
+    }
+    for (const [index, body] of networkBodies.entries()) {
+      const record = { ...body, id, default: false,
+        metadata: { origin: ['USER_DEFINED', 'SYSTEM_DEFINED', 'ORCHESTRATED'][index % 3] } };
+      const overview = Object.fromEntries(Object.entries(record).filter(([key]) =>
+        ['id', 'name', 'management', 'enabled', 'default', 'vlanId', 'metadata', 'deviceId', 'zoneId'].includes(key)));
+      serve(url => url.pathname.endsWith(`/${id}`) ? record :
+        { offset: 0, limit: 25, count: 1, totalCount: 1, data: [overview] });
+      assert.deepEqual((await cli(['network', 'list', '--site', site])).networks, [overview]);
+      assert.deepEqual((await cli(['network', 'show', '--site', site, '--network-id', id])).network, record);
+      rows.push({ task: 'B4.11', command: 'network list/show', version, variant: index,
+        status: 'passed', direction: 'public-managed-network-variants' });
+    }
+    for (const type of ['WIRED', 'WIRELESS', 'VPN', 'TELEPORT']) {
+      for (const access of type === 'WIRED' || type === 'WIRELESS' ?
+        [{ type: 'DEFAULT' }, { type: 'GUEST', authorized: false }, { type: 'GUEST', authorized: true,
+          authorization: { authorizationMethod: 'API', authorizedAt: '2026-10-30T12:00:00Z',
+            expiresAt: '2026-10-30T13:00:00Z', dataUsageLimitMBytes: 256, rxRateLimitKbps: 1000, txRateLimitKbps: 500 } }] : [{ type: 'DEFAULT' }]) {
+        const record = { id, name: 'Synthetic client', type, access, connectedAt: client.connectedAt, ipAddress: client.ipAddress,
+          ...(['WIRED', 'WIRELESS'].includes(type) ? { macAddress: client.macAddress, uplinkDeviceId: secondId } : {}) };
+        const { authorization, ...overviewAccess } = access;
+        const overview = { ...record, access: overviewAccess };
+        serve(url => url.pathname.endsWith(`/${id}`) ? record :
+          { offset: 0, limit: 25, count: 1, totalCount: 1, data: [overview] });
+        assert.deepEqual((await cli(['client', 'list', '--site', site])).clients, [overview]);
+        assert.deepEqual((await cli(['client', 'show', '--site', site, '--client-id', id])).client,
+          { ...record, access: { ...overviewAccess, ...(authorization ? { authorization: '[REDACTED]' } : {}) } });
+        rows.push({ task: 'B4.11', command: 'client list/show', version, type, access,
+          status: 'passed', direction: 'public-client-type-and-access-variants' });
+      }
+    }
+    for (const [command, key, types] of [
+      ['vpn server list', 'vpnServers', ['L2TP', 'OPENVPN', 'PPTP', 'UID', 'WIREGUARD']],
+      ['vpn site-to-site-tunnel list', 'vpnTunnels', ['IPSEC', 'OPENVPN', 'WIREGUARD']],
+    ]) {
+      for (const type of types) {
+        for (const origin of ['USER_DEFINED', 'DERIVED']) {
+          const record = { id, name: 'Synthetic VPN', type, ...(key === 'vpnServers' ? { enabled: true } : {}),
+            metadata: { origin, ...(key === 'vpnTunnels' && origin === 'DERIVED' ? { source: 'SDWAN' } : {}) } };
+          serve(() => ({ offset: 0, limit: 25, count: 1, totalCount: 1,
+            data: [{ ...record, connectionConfiguration: { address: '192.0.2.99' } }] }));
+          assert.deepEqual((await cli(scoped(command)))[key], [record]);
+          rows.push({ task: 'B4.11', command, version, type, origin,
+            status: 'passed', direction: 'public-vpn-overview-variants' });
+        }
+      }
+    }
+    for (const [command, key, origins] of [
+      ['device-tag list', 'deviceTags', ['USER_DEFINED', 'ORCHESTRATED']],
+      ['radius profile list', 'radiusProfiles', ['USER_DEFINED', 'SYSTEM_DEFINED', 'DERIVED']],
+    ]) {
+      for (const origin of origins) {
+        const record = { id, name: 'Synthetic metadata variant', metadata: { origin },
+          ...(key === 'deviceTags' ? { deviceIds: [secondId] } : {}) };
+        serve(() => ({ offset: 0, limit: 25, count: 1, totalCount: 1, data: [record] }));
+        assert.deepEqual((await cli(scoped(command)))[key], [record]);
+        rows.push({ task: 'B4.11', command, version, origin, status: 'passed', direction: 'public-metadata-variants' });
+      }
     }
     const references = { referenceResources: [{ resourceType: 'CLIENT', referenceCount: 2,
       references: [{ referenceId: id }, { referenceId: secondId }] }] };

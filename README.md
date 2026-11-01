@@ -216,7 +216,7 @@ The Artium read fixture has no cross-invocation write custody, so hosted mutatio
 These commands share the preview, confirmation, durable request ID and recovery controls described above.
 Use `--body-file <path>` for creates, replacements, patches and ordering; bodies follow the observed application's shipped contract.
 `update` replaces the selected resource rather than merging fields.
-Independent verification includes omitted optional fields and selected-contract defaults, so retained filters or incorrect defaults leave the receipt `accepted` rather than `verified`.
+Replacement verification includes omitted optional fields and selected-contract defaults, so retained filters or incorrect defaults leave the receipt `accepted` rather than `verified`.
 Policy `patch` changes logging settings and, on 11.0.97, flow reporting.
 Patch verification compares only submitted fields; policy create and replacement verification also check the selected contract's documented flow-reporting default when omitted.
 Named protocol names are emitted in lowercase on writes.
@@ -360,8 +360,8 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0/B4.1 selectors, plus the default implemented suite, are supported now.
-The B4 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0 through B4.4 selectors, plus the default implemented suite, are supported now.
+The B4.0 and B4.1 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
 The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
 The B4.2, B4.3 and B4.4 selectors exercise policy, zone and ACL writes and ordering against independent fake state under outbound network denial.
 B3 processes run under an outbound network deny allowing only their synthetic vendor listener.

@@ -5,7 +5,9 @@ import type { Harness } from './writes.ts';
 import { firewallBody, firewallRecord, id, neighbourId, site, type Row } from './policy-fixtures.ts';
 import { obligations } from './variant-coverage.ts';
 
-interface Source { components: { schemas: Record<string, { discriminator?: { mapping: Record<string, string> } }> } }
+interface Source { components: { schemas: Record<string, {
+  discriminator?: { mapping: Record<string, string> }; properties?: { name?: { enum?: string[] } };
+}> } }
 
 export function protocolVariants(version: string) {
   const source = JSON.parse(readFileSync(new URL(`../evidence/sources/network-${version}-openapi.json`, import.meta.url), 'utf8')) as Source;
@@ -15,10 +17,15 @@ export function protocolVariants(version: string) {
     const name = variant.tag?.property === 'name' ? variant.tag.value : variant.value;
     if (typeof name !== 'string') continue;
     const schema = variant.schema.replace('/properties/name', '').replace('#/components/schemas/', '');
-    const mapping = source.components.schemas[schema]?.discriminator?.mapping;
-    if (!mapping?.[name.toUpperCase().replaceAll('-', '_').replaceAll('.', '_')]) continue;
+    const definition = source.components.schemas[schema];
+    const tag = name.toUpperCase().replaceAll('-', '_').replaceAll('.', '_');
+    if (!definition?.discriminator?.mapping[tag]) continue;
+    const values = definition.properties?.name?.enum ?? [];
+    const wireName = values.includes(name.toLowerCase()) ? name :
+      values.find(value => value.toUpperCase().replaceAll('-', '_').replaceAll('.', '_') === tag);
+    if (wireName === undefined) continue;
     const ipVersion = schema.includes('IPv4 and IPv6') ? 'IPV4_AND_IPV6' : schema.includes('IPv4') ? 'IPV4' : 'IPV6';
-    selected.set(`${ipVersion}:${name}`, { ipVersion, name });
+    selected.set(`${ipVersion}:${wireName}`, { ipVersion, name: wireName });
   }
   return [...selected.values()];
 }

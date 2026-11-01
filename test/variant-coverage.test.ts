@@ -5,11 +5,23 @@ import { VariantCoverage, obligations, type Exchange } from './variant-coverage.
 import { protocolVariants } from './protocol-variants.ts';
 import { firewallBody, firewallRecord, id, site } from './policy-fixtures.ts';
 
+const { contractValidator } = await import(new URL('../dist/validation.js', import.meta.url).href) as typeof import('../src/validation.js');
+
 const root = fileURLToPath(new URL('../', import.meta.url));
 const base = `/proxy/network/integration/v1/sites/${site}/firewall/policies`;
 const scope = { ipVersion: 'IPV4_AND_IPV6', protocolFilter: { type: 'NAMED_PROTOCOL', matchOpposite: false, protocol: { name: 'DCCP' } } };
 
 for (const version of ['10.6.109', '11.0.97']) {
+  test(`generated protocol fixtures satisfy the detail contract on ${version}`, () => {
+    const validator = contractValidator(version);
+    const pointer = '#/paths/~1v1~1sites~1{siteId}~1firewall~1policies~1{firewallPolicyId}/get/responses/200/content/application~1json/schema';
+    for (const { ipVersion, name } of protocolVariants(version)) {
+      const body = { ...firewallBody(version), ipProtocolScope: { ipVersion,
+        protocolFilter: { type: 'NAMED_PROTOCOL', matchOpposite: false, protocol: { name } } } };
+      assert.deepEqual(validator.validate(pointer, firewallRecord(version, body)), [], `${ipVersion}/${name}`);
+    }
+  });
+
   test(`DCCP is observed in every firewall operation position on ${version}`, () => {
     const coverage = new VariantCoverage('synthetic-test-key', root);
     const info: Exchange = { method: 'GET', path: '/proxy/network/integration/v1/info', request: '',

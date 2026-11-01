@@ -141,8 +141,8 @@ Empty switching lists remain empty; missing details return an explicit upstream 
 Zone details include their network IDs.
 Firewall policy `list` and `show` remain gated by unresolved named-protocol conflicts CF-002 through CF-004 on 10.6.109 and CF-008 through CF-010 on 11.0.97.
 Wi-Fi broadcast `show` validates radio rates using the reviewed exact-field numeric enum resolutions CF-005/CF-006 and CF-011/CF-012 respectively.
-These structural conflicts block the reachable response schema even when the affected optional field is absent or a list is empty.
-These reads return `CONTRACT_CONFLICT` diagnostics naming the selected version, conflict IDs and source pointers.
+The unresolved firewall conflicts block the reachable response schema even when the affected optional field is absent or a list is empty.
+Firewall policy `list` and `show` return `CONTRACT_CONFLICT` diagnostics naming the selected version, conflict IDs and source pointers.
 `wifi broadcast list`, policy ordering and zone reads remain available.
 No source conflict is silently normalized.
 
@@ -189,7 +189,7 @@ Each configuration/profile namespace owns its request IDs durably.
 The journal contains hashes, audit IDs, resource IDs and outcomes, never request bodies or keys.
 An exclusive claim and synced intent precede dispatch; a synced `unknown` record precedes any possible send.
 Mutations are never retried by transport.
-Reusing an owned ID reports its existing outcome, while changing its request or identity fails.
+Reusing an owned ID runs the read-only reconciliation described below and reports the reconciled outcome without resending the mutation; changing its request or identity fails.
 Empty, truncated or corrupt claims fail closed and never expire into retry permission.
 
 `write show --request-id <id>` reports the stored intent for the selected identity.
@@ -284,14 +284,14 @@ The validation compiler checks the retained source hashes and compiles each vers
 It supports the validation keywords present in those contracts and rejects unsupported keywords.
 Discriminator dispatch follows the recorded interpretation in [the normalization ledger](src/normalization-ledger.json).
 Required fields and additional-property rules retain their recorded meaning.
-Nullability follows the source schema except for the response-only rules in the normalization ledger.
+Nullability follows the source schema except at the exact request and response fields approved in the normalization ledger.
 UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI formats remain annotations.
 
-[The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations, contract cases and resolution status.
+[The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations and contract cases.
 The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
 Unresolved structural conflicts block operations whose response schemas reach the conflicting field, with the retained device-family exception described in [Inventory, clients, networks and references](#inventory-clients-networks-and-references).
 Application and site validation remain available.
-The normalization ledger owns the reviewed PoE resolution and response-side NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
+The normalization ledger owns the reviewed PoE and Wi-Fi radio-rate enum resolutions and request/response NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
 
 ## Development and verification
 

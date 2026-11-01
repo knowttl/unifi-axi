@@ -55,6 +55,9 @@ export async function verifyGuestDevices(h: Harness) {
       let available = true;
       let failure = false;
       let completed = 0;
+      let changingUsage = false;
+      let changeAuthorizationAt = Infinity;
+      const usageReads: number[] = [];
       const sent: { method: string; path: string; body: unknown }[] = [];
       const base = `/proxy/network/integration/v1/sites/${site}`;
       const profile = { ...h.trusted, siteId: site, writes: { allowWrites: true,
@@ -70,7 +73,20 @@ export async function verifyGuestDevices(h: Harness) {
           }
           const collection = `${base}/${guest ? 'clients' : 'devices'}`;
           assert.ok(url.pathname === collection || url.pathname === `${collection}/${id}` || url.pathname === `${collection}/${neighbourId}`);
-          if (url.pathname !== collection) return state.find(row => row.id === url.pathname.split('/').at(-1));
+          if (url.pathname !== collection) {
+            const row = state.find(row => row.id === url.pathname.split('/').at(-1));
+            if (changingUsage && row?.id === id) {
+              const access = row.access as Row;
+              if (access.authorization) {
+                const durationSec = 10 + usageReads.length;
+                usageReads.push(durationSec);
+                return { ...row, access: { ...access, authorization: { ...access.authorization as Row,
+                  ...(usageReads.length >= changeAuthorizationAt ? { expiresAt: '2026-10-30T14:00:00Z' } : {}),
+                  usage: { durationSec, bytes: durationSec * 3, rxBytes: durationSec * 2, txBytes: durationSec } } } };
+              }
+            }
+            return row;
+          }
           const data = guest ? state : state.map(row => ({ ...row, features: [], interfaces: [] }));
           return { offset: 0, limit: 25, count: data.length, totalCount: data.length, data };
         }
@@ -141,6 +157,32 @@ export async function verifyGuestDevices(h: Harness) {
       assert.equal((await run(execute(confirmation, 'success'))).write.outcome, entry.outcome);
       assert.equal(sent.length, 2, 'Repeated request ID reads instead of resending');
       assert.equal(completed, 1);
+      if (guest) {
+        changingUsage = true;
+        for (const [stage, changedAt, error] of [
+          ['execution', 2, 'CONFIRMATION_MISMATCH'],
+          ['dispatch', 3, 'WRITE_DRIFT'],
+          ['usage-only', Infinity, null],
+        ] as const) {
+          state = [neighbour, { ...client, access: { type: 'GUEST', authorized: true, authorization } }];
+          usageReads.length = 0;
+          changeAuthorizationAt = changedAt;
+          const previousSent = sent.length;
+          const preview = await run(args);
+          const result = await run(execute(preview.preview.confirmation, stage), error ? 1 : 0);
+          if (error) {
+            assert.equal(result.error.code, error);
+            assert.equal(sent.length, previousSent, 'Authorization changes refuse before mutation');
+          } else {
+            assert.equal(result.write.outcome, 'accepted');
+            assert.deepEqual(usageReads.slice(0, 3), [10, 11, 12], 'Usage changes through preview, execution and dispatch');
+            assert.deepEqual(sent.slice(previousSent), [{ method: 'POST', path: base + entry.suffix, body: entry.body }]);
+            assert.deepEqual(state[1], { ...client, access: { type: 'GUEST', authorized: entry.body!.action === 'AUTHORIZE_GUEST_ACCESS',
+              ...(entry.body!.action === 'AUTHORIZE_GUEST_ACCESS' ? { authorization } : {}) } });
+          }
+          assert.deepEqual(state[0], neighbour);
+        }
+      }
       rows.push({ task: guest ? 'B4.9' : 'B4.10', operation: entry.operation, version, action: entry.body?.action,
         variant: index, status: 'passed', direction: 'exact-request-target-grants-drift-http-failure-and-replay' });
     }

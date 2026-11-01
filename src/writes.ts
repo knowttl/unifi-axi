@@ -186,8 +186,16 @@ async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' 
   if (request.operation.id === 'OP-049') return rows.filter(row => row.vlanId === request.body!.vlanId).map(row => ({ id: row.id, vlanId: row.vlanId }));
   if (request.operation.method === 'POST' && !request.target) return rows;
   if (!rows.some(row => (row.id as string).toLowerCase() === request.target)) return null;
-  return (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.show)!,
-    { site: request.site, [family.target]: request.target! }, version, ctx.peer, true) as Record<string, unknown>)[family.row];
+  const state = (await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.show)!,
+    { site: request.site, [family.target]: request.target! }, version, ctx.peer, true) as Record<string, unknown>)[family.row] as Record<string, unknown>;
+  if (request.operation.id === 'OP-016') {
+    const access = state.access as Record<string, unknown>;
+    if (access.authorization) {
+      const authorization = Object.fromEntries(Object.entries(access.authorization).filter(([key]) => key !== 'usage'));
+      return { ...state, access: { ...access, authorization } };
+    }
+  }
+  return state;
 }
 
 function receipt(record: Intent, requestId: string) {

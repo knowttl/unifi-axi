@@ -299,6 +299,9 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
     [['network', 'create'], 'INVALID_INPUT'],
     [['network', 'create', '--execute', '--confirm', '0'.repeat(64), '--request-id', 'host-custody-denied', '--body-file', '/other'], 'INVALID_INPUT'],
     [['network', 'delete', '--network-id', first.id, '--execute', '--confirm', '0'.repeat(64), '--request-id', 'host-delete-denied'], 'INVALID_INPUT'],
+    [['network', 'update', '--network-id', first.id, '--body-file', '/other', '--execute', '--confirm', '0'.repeat(64), '--request-id', 'host-update-denied'], 'INVALID_INPUT'],
+    [['hotspot', 'voucher', 'list', '--site', first.id, '--secret-output', '/other'], 'INVALID_INPUT'],
+    [['wifi', 'broadcast', 'show', '--site', first.id, '--wifi-broadcast-id', first.id, '--secret-output', '/other'], 'INVALID_INPUT'],
     [['write', 'show', '--request-id', 'host-custody-denied'], 'INVALID_INPUT'],
     [['write', 'reconcile', '--request-id', 'host-custody-denied'], 'INVALID_INPUT'],
   ]) await denied(words, code);

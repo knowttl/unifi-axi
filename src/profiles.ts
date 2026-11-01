@@ -11,6 +11,7 @@ export interface Profile {
   apiKey: SecretRef;
   siteId?: string;
   apiContract?: string;
+  allowSecretExport?: boolean;
   tls?: { trustedCertificatePem: string; peerFingerprintSha256: string; connectAddress?: string };
   writes?: { allowWrites: boolean; operations: string[] };
 }
@@ -21,7 +22,7 @@ export function writeAllowed(profile: Profile, grants: string[]): boolean {
     grants.every(grant => profile.writes!.operations.includes(grant));
 }
 const profileName = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-const fields = ['origin', 'apiKey', 'siteId', 'apiContract', 'tls', 'writes'];
+const fields = ['origin', 'apiKey', 'siteId', 'apiContract', 'allowSecretExport', 'tls', 'writes'];
 
 function invalid(message: string): never { throw new ToolError('CONFIG_INVALID', message); }
 function object(value: unknown, keys: string[], label: string): Record<string, unknown> {
@@ -48,6 +49,7 @@ export function validateProfile(value: unknown, platform = process.platform): Pr
   }
   if (data.siteId !== undefined && (typeof data.siteId !== 'string' || !data.siteId)) invalid('siteId must be a nonempty string.');
   if (data.apiContract !== undefined && (typeof data.apiContract !== 'string' || !['10.6.109', '11.0.97'].includes(data.apiContract))) invalid('Unsupported apiContract.');
+  if (data.allowSecretExport !== undefined && typeof data.allowSecretExport !== 'boolean') invalid('allowSecretExport must be a boolean.');
   if (data.writes !== undefined) {
     const writes = object(data.writes, ['allowWrites', 'operations'], 'writes');
     if (typeof writes.allowWrites !== 'boolean' || !Array.isArray(writes.operations) || writes.operations.some(op => typeof op !== 'string' || !/^(?:OP-\d{3}|[A-Za-z][A-Za-z0-9]*(?::[A-Z][A-Z0-9_]*)?)$/.test(op))) invalid('writes requires allowWrites and an operations array of exact vendor operation or variant IDs.');

@@ -31,7 +31,7 @@ interface Contract {
 
 export const versions = ['10.6.109', '11.0.97'] as const;
 
-export const writeOperations = new Set(['OP-049', 'OP-050', 'OP-008', 'OP-010', 'OP-011', 'OP-013',
+export const writeOperations = new Set(['OP-049', 'OP-050', 'OP-052', 'OP-008', 'OP-010', 'OP-011', 'OP-013',
   'OP-031', 'OP-033', 'OP-034', 'OP-036', 'OP-037', 'OP-039', 'OP-040', 'OP-042']);
 
 export const readOperations = new Set(['OP-003', 'OP-004', 'OP-005', 'OP-006', 'OP-014', 'OP-015',
@@ -74,7 +74,7 @@ export function parameterFlag(name: string): string {
   return name === 'siteId' ? 'site' : name.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
 }
 
-export const description = 'Read UniFi Network application, inventory, policies and switching information.';
+export const description = 'Read UniFi Network information and manage network configuration with confirmed writes.';
 
 export function examplesFor(operation: Operation): string[] {
   const required = operation.contracts[0]!.parameters.filter(parameter => parameter.required)

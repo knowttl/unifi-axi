@@ -9,7 +9,7 @@ Stock Artium remains unsupported.
 All 73 vendor operations are discoverable.
 `info` and `site list` use versioned response validation as described in [Application and sites](#application-and-sites).
 Read coverage includes [inventory and networks](#inventory-clients-networks-and-references) and [policies, vouchers, Wi-Fi and switching](#policies-vouchers-wi-fi-and-switching), subject to the documented contract gates.
-Network creation and deletion support [previews and explicitly granted execution](#network-write-foundation).
+Network creation, update and deletion support [previews and explicitly granted execution](#network-write-foundation).
 [Firewall and ACL writes](#firewall-and-acl-writes) extend these controls to policies, zones, rules and ordering.
 Use `unifi-axi commands` for each operation's implementation status; unimplemented operations exit 1 with `NOT_IMPLEMENTED` before network access.
 Development verification uses local synthetic controllers only and performs no router reads or writes.
@@ -124,7 +124,8 @@ unifi-axi network references --site <site-id> --network-id <network-id>
 
 Responses preserve gateway, switch and unmanaged network fields and validate their selected subtype.
 Response-side NORM-001 accepts omitted or explicit null `dhcpGuarding` as disabled, preserving null in output.
-Other null fields must satisfy the original schema; request-side normalization remains unavailable.
+Other null fields must satisfy the original schema.
+See [Network write foundation](#network-write-foundation) for request-side NORM-001 support.
 Validation failures include the offending field path without echoing its value.
 The approved 10.6.109 PoE resolution preserves integer values without coercion and rejects strings.
 All 11.0.97 device reads remain blocked with `CONTRACT_CONFLICT` for unresolved CF-007; its integer type and string enum disagree, and no 11.0.97 override is approved.
@@ -142,11 +143,24 @@ Empty switching lists remain empty; missing details return an explicit upstream 
 Zone details include their network IDs.
 Firewall policy reads accept upper- or lowercase named protocols through the reviewed version-specific resolution for CF-002/CF-003/CF-004 and CF-008/CF-009/CF-010.
 Unknown named protocols return `CONTRACT_CONFLICT`.
-Wi-Fi broadcast `show` remains gated by rate enum conflicts CF-005/CF-006 and CF-011/CF-012 respectively.
-These structural conflicts block the reachable response schema even when the affected optional field is absent or a list is empty.
-These reads return `CONTRACT_CONFLICT` diagnostics naming the selected version, conflict IDs and source pointers.
+Wi-Fi broadcast `show` validates radio rates using the reviewed exact-field numeric enum resolutions CF-005/CF-006 and CF-011/CF-012 respectively.
 `wifi broadcast list`, policy ordering and zone reads remain available.
 No source conflict is silently normalized.
+
+`hotspot voucher list/show` and `wifi broadcast list/show` accept `--secret-output <absolute-path>` for standalone protected response export.
+Exports default off and require `"allowSecretExport": true` in the selected file profile as well as the explicit output flag.
+Without that standing profile opt-in, `SECRET_EXPORT_DENIED` names `allowSecretExport` and refuses before credential resolution, vendor access or file reservation.
+`UNIFI_AXI_READ_ONLY` continues to govern native mutations; it does not replace or change the separate export opt-in.
+The destination must be new and inside an existing private directory owned by the current user with no group or other permissions on Linux; exported files use mode 0600.
+Windows verifies the directory's protected ACL and restricts and verifies the new file's ACL using the rules in [Credentials and transport](#credentials-and-transport).
+The file contains JSON entries with a resource ID, an allowlisted response path and its secret value.
+Voucher codes and personal Wi-Fi passphrases, including WPA2 personal preshared keys, are the only exported values.
+Wi-Fi list exports fetch the documented detail for each listed ID.
+Authentication keys remain redacted even at an allowlisted location.
+Ordinary output contains IDs and a delivery receipt only.
+An existing destination is never replaced, and a failed read removes the reserved file so the read can be repeated with a new destination.
+Hosted execution refuses local exports before resolving a profile or contacting the vendor.
+Mutation-time secret delivery remains pending B4.8.
 
 Voucher `code` fields and Wi-Fi `passphrase` fields are replaced with `[REDACTED]` in default output.
 Diagnostic `error.code` fields remain visible.
@@ -154,15 +168,18 @@ Voucher lists use the documented default limit of 100; other lists use their doc
 
 ## Network write foundation
 
-`network create --body-file <path>` previews an unmanaged network creation.
-The initial body supports `name`, `management: "UNMANAGED"`, `enabled`, `vlanId` and optional schema-valid `dhcpGuarding`.
-Gateway and switch creation variants remain pending.
+`network create --body-file <path>` previews network creation.
+`network update --network-id <id> --body-file <path>` previews a complete replacement using PUT.
+Request body files must satisfy the private secret-file checks in [Credentials and transport](#credentials-and-transport), including for previews.
+Both support the selected contract's `GATEWAY`, `SWITCH` and `UNMANAGED` variants, including nested DHCP, IPv6 and NAT settings.
+Requests reject undeclared fields, unmapped tags and missing required subtype fields.
+Optional `dhcpGuarding` accepts omission, a schema-valid configuration or explicit null to disable it under NORM-001.
 `network delete --network-id <id>` previews deletion of that exact network.
 Omitted `--force` and `--force false` normalize to the same request; `--force true` needs a new preview.
 Request site and network UUIDs normalize to lowercase before binding and dispatch; resource identity comparisons ignore UUID letter case.
-Both commands select a site through `--site`, the profile or unambiguous discovery.
+All three commands select a site through `--site`, the profile or unambiguous discovery.
 
-Execution requires `writes.allowWrites: true` and exact vendor grants in `writes.operations`: `createNetwork` plus `createNetwork:UNMANAGED` for creation, or `deleteNetwork` for deletion.
+Execution requires `writes.allowWrites: true` and exact vendor grants in `writes.operations`: `createNetwork` plus `createNetwork:<management>` for creation, `updateNetwork` plus `updateNetwork:<management>` for update, or `deleteNetwork` for deletion.
 Legacy `OP-049`/`OP-050` entries are readable profile syntax but do not authorize execution.
 `UNIFI_AXI_READ_ONLY=true` or `1` overrides all grants.
 Repeat the previewed command with `--execute --confirm <confirmation> --request-id <stable-id>`.
@@ -178,7 +195,7 @@ Each configuration/profile namespace owns its request IDs durably.
 The journal contains hashes, audit IDs, resource IDs and outcomes, never request bodies or keys.
 An exclusive claim and synced intent precede dispatch; a synced `unknown` record precedes any possible send.
 Mutations are never retried by transport.
-Reusing an owned ID reports its existing outcome, while changing its request or identity fails.
+Reusing an owned ID runs the read-only reconciliation described below and reports the reconciled outcome without resending the mutation; changing its request or identity fails.
 Empty, truncated or corrupt claims fail closed and never expire into retry permission.
 
 `write show --request-id <id>` reports the stored intent for the selected identity.
@@ -300,14 +317,14 @@ The validation compiler checks the retained source hashes and compiles each vers
 It supports the validation keywords present in those contracts and rejects unsupported keywords.
 Discriminator dispatch follows the recorded interpretation in [the normalization ledger](src/normalization-ledger.json).
 Required fields and additional-property rules retain their recorded meaning.
-Nullability follows the source schema except for the response-only rules in the normalization ledger.
+Nullability follows the source schema except at the exact request and response fields approved in the normalization ledger.
 UUID, date, date-time, int32 and int64 formats are checked; other OpenAPI formats remain annotations.
 
-[The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations, contract cases and resolution status.
+[The conflict registry](src/contract-conflicts.json) owns the structural and description-versus-null conflicts, including their versions, pointers, source hashes, assigned operations and contract cases.
 The contract runner reports these diagnostics without claiming that blocked public operation cases passed.
 Unresolved structural conflicts block operations whose response schemas reach the conflicting field, with the retained device-family exception described in [Inventory, clients, networks and references](#inventory-clients-networks-and-references).
 Application and site validation remain available.
-The normalization ledger owns the reviewed PoE and named-protocol resolutions and response-side NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
+The normalization ledger owns the reviewed PoE, named-protocol and Wi-Fi radio-rate enum resolutions and request/response NORM-001 rules, their version scopes and expectations, and the required fields for future resolutions.
 
 ## Development and verification
 
@@ -330,7 +347,7 @@ pnpm verify:contracts -- --task B2.1
 ```
 
 `pnpm check` runs strict types, lint, all implemented packaged obligations, versioned contract checks and direct private-file, paging and transport tests.
-The opt-in Artium proof runs separately with `pnpm verify:artium`, extending B1.3 read coverage with B3.3 write-admission denials and reporting task `B3.3`.
+The opt-in Artium proof runs separately with `pnpm verify:artium`, extending B1.3 read coverage with write-admission and local secret-export denials and reporting task `B3.3`.
 The configured no-mistakes test command also runs it when `UNIFI_AXI_ARTIUM_HOST` and `UNIFI_AXI_ARTIUM_OUTPUT` select a frozen exported fixture and an external evidence directory.
 That command prints an explicit skip reason when no Artium host fixture is selected.
 The packaged selector builds and packs the distribution, installs it into a clean temporary prefix and invokes the installed public executable in a temporary user environment.
@@ -343,7 +360,8 @@ Version measurements compare eleven paired samples per alias against the same ho
 The verifier emits package integrity, source/input hashes, runtime, platform, timings and task/operation result rows.
 Temporary installation and user state are removed even on failure.
 
-`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10 and B3.1 through B3.3 selectors, plus the default implemented suite, are supported now.
+`--task B1.1`, `--task B1.2`, `--task B1.2a`, `--task B2.0`, B2.2 through B2.10, B3.1 through B3.3 and B4.0/B4.1 selectors, plus the default implemented suite, are supported now.
+The B4 selectors add protected response exports; B4.1 also exercises all network management variants with nested DHCP, IPv6 and NAT fields, exact replacements, force binding and lost-acknowledgement recovery.
 The B3 selectors add normalized write previews, exact grants, fake target mutations, concurrent ownership, persistence/dispatch crash points and read-only recovery through the installed executable.
 The B4.2, B4.3 and B4.4 selectors exercise policy, zone and ACL writes and ordering against independent fake state under outbound network denial.
 B3 processes run under an outbound network deny allowing only their synthetic vendor listener.

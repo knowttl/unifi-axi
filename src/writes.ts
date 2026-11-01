@@ -8,13 +8,14 @@ import { ToolError, type Redactor } from './security.js';
 import { contractValidator } from './validation.js';
 import { sendMutation, type PeerIdentity } from './transport.js';
 import { digest, WriteJournal, type Intent } from './write-journal.js';
+import { PrivateFiles } from './private-file.js';
 
 const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export const foundationWrites = writeOperations;
 
 const families = [
-  { writes: ['OP-049', 'OP-050'], list: 'OP-048', show: 'OP-051', rows: 'networks', row: 'network', target: 'network-id' },
+  { writes: ['OP-049', 'OP-050', 'OP-052'], list: 'OP-048', show: 'OP-051', rows: 'networks', row: 'network', target: 'network-id' },
   { writes: ['OP-008', 'OP-011', 'OP-013'], list: 'OP-007', show: 'OP-012', rows: 'aclRules', row: 'aclRule', target: 'acl-rule-id' },
   { writes: ['OP-031', 'OP-034', 'OP-036', 'OP-037'], list: 'OP-030', show: 'OP-035', rows: 'firewallPolicies', row: 'firewallPolicy', target: 'firewall-policy-id' },
   { writes: ['OP-039', 'OP-040', 'OP-042'], list: 'OP-038', show: 'OP-041', rows: 'firewallZones', row: 'firewallZone', target: 'firewall-zone-id' },
@@ -92,21 +93,14 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   if (operation.contracts.find(contract => contract.version === version)!.requestBody) {
     if (!values['body-file']) throw new ToolError('INVALID_ARGUMENT', `${operation.command} requires --body-file <path>.`);
     let parsed: unknown;
-    try { parsed = JSON.parse(await readFile(values['body-file'], 'utf8')); }
+    try { parsed = JSON.parse(await new PrivateFiles().read(values['body-file'], true)); }
     catch { throw new ToolError('INVALID_ARGUMENT', 'Unable to read a JSON request body file.'); }
-    if (validator.validate(`${pointer}/requestBody/content/application~1json/schema`, parsed).length) {
+    if (validator.validateRequest(`${pointer}/requestBody/content/application~1json/schema`, parsed).length) {
       throw new ToolError('INVALID_ARGUMENT', 'Request body does not match the selected Network contract.');
     }
     body = parsed as Record<string, unknown>;
     if (operation.command.startsWith('firewall policy ')) normalizeProtocols(body);
-  }
-  if (operation.id === 'OP-049') {
-    if (!body) throw new ToolError('INVALID_ARGUMENT', 'A network body is required.');
-    if (body.management !== 'UNMANAGED') throw new ToolError('NOT_IMPLEMENTED', 'The write foundation supports UNMANAGED network creation only. Other variants remain pending.');
-    if (Object.keys(body).some(key => !['name', 'management', 'enabled', 'vlanId', 'dhcpGuarding'].includes(key))) {
-      throw new ToolError('INVALID_ARGUMENT', 'Request contains fields outside the unmanaged network contract.');
-    }
-    grants.push(`${operation.vendorOperationId}:UNMANAGED`);
+    if (['OP-049', 'OP-052'].includes(operation.id)) grants.push(`${operation.vendorOperationId}:${String(body.management)}`);
   }
   query.sort();
   if (query.size) path += `?${query}`;
@@ -167,7 +161,7 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
   const previous = await journal?.read();
   if (previous) {
     if (previous.binding !== request.binding || previous.confirmation !== values.confirm) throw new ToolError('WRITE_BINDING_MISMATCH', 'Request ID is bound to another request or identity.');
-    return receipt(previous, values['request-id']!);
+    return inspectWrite(profiles, explicit, redactor, values['request-id']!, true);
   }
   const state = await selectedState(ctx, request);
   if (ordering[operation.id] && (new Set(request.targets).size !== request.targets.length ||
@@ -182,7 +176,7 @@ export async function writeOperation(profiles: Profiles, explicit: string | unde
     help: ['Repeat the same request with --execute --confirm <confirmation> --request-id <stable-id>. Concurrent vendor changes can occur after the final read.'] };
   if (values.confirm !== confirmation) throw new ToolError('CONFIRMATION_MISMATCH', 'Request, selected state or identity changed. Preview the request again.');
   let projection = request.body;
-  if (operation.method === 'PUT' && !ordering[operation.id]) {
+  if (operation.method === 'PUT' && !ordering[operation.id] && operation.id !== 'OP-052') {
     projection = contractValidator(ctx.api.contract!).replacementProjection(
       `#/paths/${escape(operation.path)}/put/requestBody/content/application~1json/schema`, request.body!);
   }
@@ -250,5 +244,5 @@ export async function inspectWrite(profiles: Profiles, explicit: string | undefi
     await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!, { site: record.site }, ctx.api.contract!, ctx.peer);
   }
   await journal.observe(outcome);
-  return { ...receipt(record, requestId), reconciliation: { outcome, readOnly: true } };
+  return { ...receipt({ ...record, outcome }, requestId), reconciliation: { outcome, readOnly: true } };
 }

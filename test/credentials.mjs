@@ -111,6 +111,7 @@ Set-Acl -LiteralPath $p -AclObject $acl
     { ...source, apiKey: { env: 'SYNTHETIC_KEY', file: secretFile } },
     { ...source, apiKey: { file: './relative' } }, { ...source, unexpected: true },
     { ...source, apiContract: ['10.6.109'] },
+    { ...source, allowSecretExport: 'true' },
     { ...source, origin: 'http://localhost' }, { ...source, origin: 'https://localhost/path' },
     { ...source, origin: 'https://user:password@localhost' },
     { ...source, tls: { insecure: true } }, { ...source, writes: { allowWrites: true, operations: [], extra: true } },
@@ -257,8 +258,12 @@ Set-Acl -LiteralPath $p -AclObject $acl
           configure, trusted, home, config, port, syntheticKey, task: writeTask,
           seed: handler => { requests = []; respond = handler; }, requests: () => requests,
         };
-        if (writeTask === 'all' || writeTask.startsWith('B3.')) inventoryRows.push(...await verifyWrites({ ...harness, task: writeTask === 'all' ? 'B3.3' : writeTask }));
-        if (writeTask === 'all' || writeTask.startsWith('B4.')) {
+        if (writeTask === 'all' || writeTask.startsWith('B3.') || ['B4.0', 'B4.1'].includes(writeTask)) inventoryRows.push(...await verifyWrites({ ...harness, task: writeTask === 'all' || writeTask.startsWith('B4.') ? 'B3.3' : writeTask }));
+        if (writeTask === 'all' || ['B4.0', 'B4.1'].includes(writeTask)) {
+          const { verifyB4 } = await import('./b4.ts');
+          inventoryRows.push(...await verifyB4({ ...harness, task: writeTask === 'all' ? 'B4.1' : writeTask }));
+        }
+        if (writeTask === 'all' || ['B4.2', 'B4.3', 'B4.4'].includes(writeTask)) {
           const { verifyPolicyWrites } = await import('./policy-writes.ts');
           inventoryRows.push(...await verifyPolicyWrites(harness));
         }

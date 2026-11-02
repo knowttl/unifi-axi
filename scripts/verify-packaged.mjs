@@ -170,7 +170,7 @@ try {
 
   const metadata = JSON.parse(command(process.execPath, ['--input-type=module', '-e',
     "import {catalogue} from '@knowttl/unifi-axi/catalogue';import capabilities from '@knowttl/unifi-axi/capabilities' with {type:'json'};import {readFileSync} from 'node:fs';const skill=readFileSync(new URL(import.meta.resolve('@knowttl/unifi-axi/skill')),'utf8');console.log(JSON.stringify({catalogue,capabilities,skill}));"], { cwd: prefix, env }).stdout);
-  verifyIntegrations({ cli, temporary, user, guard });
+  verifyIntegrations({ cli, temporary, user, guard, executable });
   assert.equal(metadata.capabilities.stage, 'B4.11', 'Packaged capabilities identify the current implementation stage');
   assert.deepEqual(metadata.catalogue.map(({ id, command, vendorOperationId, method, path, effect }) =>
     ({ id, command, vendorOperationId, method, path, effect })), expected);

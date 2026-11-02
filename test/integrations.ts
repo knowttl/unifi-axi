@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, statSync, symlinkSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { decode } from '@toon-format/toon';
 import { parse } from '@decimalturn/toml-patch';
 
@@ -12,9 +13,21 @@ interface Context {
   temporary: string;
   user: string;
   guard: string;
+  executable: string;
 }
 
-export function verifyIntegrations({ cli, temporary, user, guard }: Context): void {
+export function verifyIntegrations({ cli: installedCli, temporary, user, guard, executable }: Context): void {
+  let integrationPath = process.env.PATH ?? '';
+  if (process.platform !== 'win32') {
+    const competing = join(temporary, 'competing-bin');
+    const current = join(temporary, 'current-bin');
+    mkdirSync(competing); mkdirSync(current);
+    writeFileSync(join(competing, 'unifi-axi'), "#!/usr/bin/env node\nprocess.stdout.write('error:\\n  code: WRONG_INSTALLATION\\n');\n", { mode: 0o700 });
+    symlinkSync(executable, join(current, 'unifi-axi'));
+    integrationPath = [competing, current, integrationPath].join(delimiter);
+  }
+  const cli: Context['cli'] = (args, status, env) => installedCli(args, status, { PATH: integrationPath, ...env });
+  const hookEnvironment = { PATH: integrationPath, NODE_OPTIONS: `--import=${guard}`, SYNTHETIC_KEY: '' };
   const config = join(temporary, 'integration-profiles.json');
   writeFileSync(config, JSON.stringify({ version: 1, profiles: {
     lab: { origin: 'https://synthetic.invalid', apiKey: { env: 'SYNTHETIC_KEY' } },
@@ -36,12 +49,12 @@ export function verifyIntegrations({ cli, temporary, user, guard }: Context): vo
       const target = installed.setup.targets[0]!;
       const document = JSON.parse(readFileSync(target, 'utf8'));
       const command = document.hooks.SessionStart[0].hooks[0].command as string;
-      const outside = spawnSync(command, { shell: true, cwd: user, encoding: 'utf8' });
+      const outside = spawnSync(command, { shell: true, cwd: user, encoding: 'utf8', env: hookEnvironment });
       assert.equal(outside.status, 0, outside.stderr);
       assert.equal(outside.stdout, '', 'Hooks emit no context outside the selected directory');
       const inside = spawnSync(command, { shell: true, cwd: directory, encoding: 'utf8',
-        env: { PATH: process.env.PATH, NODE_OPTIONS: `--import=${guard}`, SYNTHETIC_KEY: '' } });
-      assert.equal(inside.status, 1, inside.stderr);
+        env: hookEnvironment });
+      assert.equal(inside.status, 1, inside.stdout + inside.stderr);
       assert.equal((decode(inside.stdout) as unknown as ErrorResult).error.code, 'AUTH_REQUIRED', 'The installed hook resolves its bound profile');
       document.unrelated = { keep: true };
       writeFileSync(target, JSON.stringify(document));
@@ -51,8 +64,28 @@ export function verifyIntegrations({ cli, temporary, user, guard }: Context): vo
       const next = decode(cli(args)) as unknown as SetupResult;
       cli([...args, '--execute', '--confirm', next.setup.digest]);
       assert.deepEqual(JSON.parse(readFileSync(target, 'utf8')).unrelated, { keep: true });
-      if (app === 'codex') assert.match(readFileSync(installed.setup.targets[1]!, 'utf8'), /\[features\]\nhooks = true/);
-    } else assert.match(readFileSync(installed.setup.targets[0]!, 'utf8'), /experimental.chat.system.transform/);
+      if (app === 'codex') {
+        const configuration = parse(readFileSync(installed.setup.targets[1]!, 'utf8')) as { features: { hooks: boolean } };
+        assert.equal(configuration.features.hooks, true);
+      }
+    } else {
+      const plugin = pathToFileURL(installed.setup.targets[0]!).href;
+      const script = `const { UnifiContext } = await import(${JSON.stringify(plugin)});
+const hooks = await UnifiContext();
+const output = { system: [] };
+await hooks['experimental.chat.system.transform']({}, output);
+console.log(JSON.stringify(output.system));`;
+      const outside = spawnSync(process.execPath, ['--input-type=module', '-e', script],
+        { cwd: user, encoding: 'utf8', env: hookEnvironment });
+      assert.equal(outside.status, 0, outside.stderr);
+      assert.deepEqual(JSON.parse(outside.stdout), [], 'The plugin emits no context outside the selected directory');
+      const inside = spawnSync(process.execPath, ['--input-type=module', '-e', script],
+        { cwd: directory, encoding: 'utf8', env: hookEnvironment });
+      assert.equal(inside.status, 0, inside.stderr);
+      const context = JSON.parse(inside.stdout) as string[];
+      assert.equal(context.length, 1);
+      assert.equal((decode(context[0]!) as unknown as ErrorResult).error.code, 'AUTH_REQUIRED', 'The generated plugin executes the bound installation and profile');
+    }
     assert.equal((decode(cli(args, 1, { UNIFI_AXI_HOSTED: '1' })) as unknown as ErrorResult).error.code, 'HOSTED_DENIED');
   }
   for (const [name, definition] of Object.entries({

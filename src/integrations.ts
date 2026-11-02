@@ -17,7 +17,8 @@ export async function setup(values: Record<string, string>, execute: boolean) {
     const candidate = join(path, process.platform === 'win32' ? 'unifi-axi.cmd' : 'unifi-axi');
     try {
       await access(candidate, constants.X_OK);
-      if (await realpath(candidate) === executable) { binary = 'unifi-axi'; break; }
+      if (await realpath(candidate) === executable) binary = 'unifi-axi';
+      break;
     } catch (error) {
       if (!['ENOENT', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
     }

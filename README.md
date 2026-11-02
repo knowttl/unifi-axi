@@ -58,6 +58,7 @@ Two optional discovery paths ship; either one is sufficient, and normal read com
   ```
 
   Setup binds the named file-backed profile and configuration path to that directory, preserves unrelated settings, repairs its managed integration and is a no-op when repeated.
+  If another installation takes precedence on `PATH` during setup, the integration uses the current installation's absolute path.
   Claude uses `.claude/settings.json`, Codex uses `.codex/hooks.json` (and enables project hooks in `.codex/config.toml`), and OpenCode uses `.opencode/plugins/unifi-axi.ts`.
   The hook emits context only when the working directory matches the selected directory.
 - Static skill: the generated skill is exported at `@knowttl/unifi-axi/skill` for on-demand discovery without hooks.

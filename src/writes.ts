@@ -185,8 +185,10 @@ async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' 
   const rows = (listing as Record<string, unknown>)[family.rows] as Record<string, unknown>[];
   if (request.operation.id === 'OP-019') {
     const pending = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-006')!, {}, version, ctx.peer);
-    return { pending: ((pending as Record<string, unknown>).pendingDevices as Record<string, unknown>[]).filter(row => row.macAddress === request.body!.macAddress),
-      adopted: rows.filter(row => row.macAddress === request.body!.macAddress) };
+    const macAddress = (request.body!.macAddress as string).toLowerCase();
+    const matches = (row: Record<string, unknown>) => (row.macAddress as string).toLowerCase() === macAddress;
+    return { pending: ((pending as Record<string, unknown>).pendingDevices as Record<string, unknown>[]).filter(matches),
+      adopted: rows.filter(matches) };
   }
   if (request.operation.id === 'OP-043') return rows.toSorted((a, b) => String(a.id).localeCompare(String(b.id)));
   if (request.operation.id === 'OP-049') return rows.filter(row => row.vlanId === request.body!.vlanId).map(row => ({ id: row.id, vlanId: row.vlanId }));
@@ -221,7 +223,8 @@ async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> 
     if (!record.targets) return record.outcome;
     const listing = await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === 'OP-044')!,
       { site: record.site }, ctx.api.contract!, ctx.peer, true);
-    const rows = (listing as Record<string, unknown>).vouchers as Record<string, unknown>[];
+    const rows: Record<string, unknown>[] = ((listing as Record<string, unknown>).vouchers as Record<string, unknown>[])
+      .map(row => ({ ...row, id: (row.id as string).toLowerCase() }));
     if (record.operation === 'OP-043') return record.targets.every(id => !rows.some(row => row.id === id)) &&
       ['accepted', 'verified', 'no-op'].includes(record.outcome) ? 'verified' : record.outcome;
     return ['accepted', 'verified'].includes(record.outcome) && record.targets.every(id => {
@@ -236,6 +239,7 @@ async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> 
   const state = await selectedState(ctx, request) as Record<string, unknown> | null;
   // Resource reads cannot prove a restart, power cycle or this invocation's guest authorization completed.
   if (actions.has(operation.id)) return record.outcome;
+  if (operation.id === 'OP-019' && state) state.macAddress = (state.macAddress as string).toLowerCase();
   if (operation.command.startsWith('firewall policy ')) normalizeProtocols(state);
   if (operation.method === 'DELETE') return state === null && ['accepted', 'verified', 'no-op'].includes(record.outcome) ? 'verified' : record.outcome;
   if (state && ['accepted', 'verified'].includes(record.outcome) && digest(Object.fromEntries(record.bodyKeys.map(key => [key, state[key]]))) === record.bodyHash) return 'verified';
@@ -278,7 +282,7 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
     help: ['Repeat the same request with --execute --confirm <confirmation> --request-id <stable-id>. Concurrent vendor changes can occur after the final read.'] };
   if (values.confirm !== confirmation) throw new ToolError('CONFIRMATION_MISMATCH', 'Request, selected state or identity changed. Preview the request again.');
   let projection = request.body;
-  if (operation.id === 'OP-019') projection = { macAddress: request.body!.macAddress };
+  if (operation.id === 'OP-019') projection = { macAddress: (request.body!.macAddress as string).toLowerCase() };
   if (operation.id === 'OP-045') projection = Object.fromEntries(Object.entries(request.body!).filter(([key]) => key !== 'count'));
   if (operation.method === 'PUT' && !ordering[operation.id] && operation.id !== 'OP-052') {
     projection = contractValidator(ctx.api.contract!).replacementProjection(
@@ -330,7 +334,8 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
       } else if (actions.has(operation.id)) {
         if ((response as Record<string, unknown>).action !== request.body!.action) throw new ToolError('RESPONSE_INVALID', 'Acknowledgement does not match the selected action.');
       } else if (operation.method === 'POST') {
-        if (operation.id === 'OP-019' && (response as Record<string, unknown>).macAddress !== request.body!.macAddress) {
+        if (operation.id === 'OP-019' && ((response as Record<string, unknown>).macAddress as string).toLowerCase() !==
+            (request.body!.macAddress as string).toLowerCase()) {
           throw new ToolError('RESPONSE_INVALID', 'Adoption acknowledgement does not match the selected MAC address.');
         }
         const target = (response as Record<string, unknown>).id;

@@ -89,6 +89,8 @@ export async function verifyWifiVouchers(h: Harness) {
       const mutations: { method: string; path: string; body: unknown }[] = [];
       let injectLate = false;
       let badAck = 0;
+      let uppercaseVoucherIds = false;
+      let changeBulkName = false;
       h.seed((request, response) => {
         assert.equal(request.headers['x-api-key'], h.syntheticKey);
         const url = new URL(request.url!, h.trusted.origin);
@@ -108,7 +110,8 @@ export async function verifyWifiVouchers(h: Harness) {
           let result: unknown;
           if (request.method === 'POST') {
             const count = Number(parsed!.count ?? 1);
-            const created = ids.slice(0, count).map(id => decorate(Object.fromEntries(Object.entries(parsed!).filter(([key]) => key !== 'count')), id));
+            const created = ids.slice(0, count).map(id => decorate(Object.fromEntries(Object.entries(parsed!).filter(([key]) => key !== 'count')),
+              uppercaseVoucherIds ? id.toUpperCase() : id));
             state.push(...created);
             result = family === 'wifi' ? created[0] : { vouchers: created };
           } else if (request.method === 'PUT') {
@@ -123,8 +126,10 @@ export async function verifyWifiVouchers(h: Harness) {
             assert.equal(match[1], body.name);
             const approved = match[2]!.split(',');
             assert.deepEqual(approved, ids.slice(0, 3));
-            state = state.filter(row => row.name !== match[1] || !approved.includes(String(row.id)));
-            result = { vouchersDeleted: approved.length };
+            if (changeBulkName) state[1] = { ...state[1], name: 'Changed after final read' };
+            const previousCount = state.length;
+            state = state.filter(row => row.name !== match[1] || !approved.includes(String(row.id).toLowerCase()));
+            result = { vouchersDeleted: previousCount - state.length };
           } else {
             state = state.filter(row => row.id !== id);
             result = family === 'wifi' ? undefined : { vouchersDeleted: 1 };
@@ -234,6 +239,15 @@ export async function verifyWifiVouchers(h: Harness) {
         assert.equal((await run([...prefix, 'create', '--body-file', bodyFile], 1)).error.code, 'INVALID_ARGUMENT');
         rows.push({ task: 'B4.7', operation: 'OP-073', version, status: 'passed', direction: 'replacement-and-stale-preview' });
       } else {
+        uppercaseVoucherIds = true;
+        state = [neighbour];
+        writeFileSync(bodyFile, JSON.stringify({ ...body, count: 3 }));
+        const createArgs = [...prefix, 'create', '--body-file', bodyFile];
+        const created = await run(execute(createArgs, (await run(createArgs)).preview.confirmation, `uppercase-create-${version}`));
+        assert.equal(created.write.outcome, 'verified', 'Uppercase voucher UUIDs reconcile with stored lowercase targets (#30)');
+        assert.deepEqual(created.write.targets, ids.slice(0, 3));
+        assert.deepEqual(state.slice(1).map(row => row.id), ids.slice(0, 3).map(id => id.toUpperCase()));
+        assert.equal((await run(['write', 'reconcile', '--request-id', `uppercase-create-${version}`])).write.outcome, 'verified');
         const args = [...prefix, 'delete-many', '--filter', `name.eq('${body.name}')`];
         const confirmation = (await run(args)).preview.confirmation;
         const before = mutations.length;
@@ -243,13 +257,21 @@ export async function verifyWifiVouchers(h: Harness) {
         assert.equal((await run(execute(args, confirmation, `bulk-drift-${version}`), 1)).error.code, 'CONFIRMATION_MISMATCH');
         assert.equal(mutations.length, before);
         state.pop();
+        changeBulkName = true;
+        const survivingId = `uppercase-survivor-${version}`;
+        assert.equal((await run(execute(args, confirmation, survivingId))).write.outcome, 'accepted', 'A voucher outside the predicate after final read still survives (#30)');
+        assert.deepEqual(state, [neighbour, decorate({ ...body, name: 'Changed after final read' }, id.toUpperCase())]);
+        assert.equal((await run(['write', 'reconcile', '--request-id', survivingId])).write.outcome, 'accepted');
+        assert.equal(mutations.length, before + 1, 'Reconciliation never resends bulk deletion');
+        changeBulkName = false; uppercaseVoucherIds = false;
+        state = [neighbour, ...ids.slice(0, 3).map(id => decorate(body, id))];
         injectLate = true;
-        assert.equal((await run(execute(args, confirmation, `bulk-${version}`))).write.outcome, 'verified');
+        assert.equal((await run(execute(args, (await run(args)).preview.confirmation, `bulk-${version}`))).write.outcome, 'verified');
         assert.deepEqual(state, [neighbour, decorate(body, ids[3]!)]);
         state = [neighbour];
         const empty = (await run(args)).preview.confirmation;
         assert.equal((await run(execute(args, empty, `bulk-empty-${version}`))).write.outcome, 'no-op');
-        assert.equal(mutations.length, before + 1);
+        assert.equal(mutations.length, before + 2);
         state.push(decorate(body, id));
         rows.push({ task: 'B4.8', operation: 'OP-043', version, status: 'passed', direction: 'conjoined-filter-late-arrival-drift-empty' });
       }

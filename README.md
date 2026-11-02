@@ -133,6 +133,8 @@ Pass `--secret-output <absolute-path>` to `hotspot voucher` and `wifi broadcast`
   Reusing an owned request ID runs read-only reconciliation instead of resending.
   `write reconcile` records a separate observation; receipts distinguish `not-sent`, `unknown`, `rejected`, `accepted`, `verified` and `no-op`, with an audit ID.
   A lost acknowledgement stays `unknown`, and a similar resource never proves creation.
+  Device adoption matches pending/adopted devices and acknowledgement MAC addresses case-insensitively, while confirmation and request-ID binding retain the submitted body's casing.
+  Voucher creation and bulk-deletion reconciliation compare UUIDs case-insensitively.
 - HTTP 4xx mutation responses produce terminal `rejected` receipts with sanitized vendor diagnostics.
   Their request IDs remain final; preview a corrected request and use a new request ID.
   Transport loss, timeouts, and server failures after possible dispatch remain `unknown` and must not be resent.
@@ -144,7 +146,8 @@ Pass `--secret-output <absolute-path>` to `hotspot voucher` and `wifi broadcast`
   The destination must be a new file in an existing private directory, and exported files use mode 0600.
   Without the profile opt-in, `SECRET_EXPORT_DENIED` refuses before any credential or vendor access.
   Never issue a new generation request to recover an existing code; use `write reconcile` and re-export with `show --secret-output`.
-- `hotspot voucher delete-many` requires `--filter`, previews the matching IDs and deletes exactly the approved ID set.
+- `hotspot voucher delete-many` requires `--filter`, previews the matching IDs and restricts deletion to those IDs together with the original filter.
+  An approved voucher that stops matching the filter can survive; the receipt remains `accepted` while any approved ID is still present.
 - Request bodies are validated against the selected contract and reject undeclared fields before any mutation.
   For STANDARD WPA2_PERSONAL broadcasts, explicitly set `securityConfiguration.fastRoamingEnabled`; preview warns when it is missing.
 - Disruptive actions (restart, PoE power cycle, guest authorization) are accepted, not proven complete: receipts stay `accepted`.

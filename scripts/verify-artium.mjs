@@ -11,6 +11,7 @@ import { decode } from '@toon-format/toon';
 import { guardEgress } from '../test/fixtures/fake-egress.mjs';
 import { verifyInventory } from '../test/inventory.mjs';
 import { verifyPolicies } from '../test/policies.mjs';
+import { runArtiumProof } from './artium-proof.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
@@ -107,10 +108,10 @@ async function denied(words, code) {
   cleanupObserved();
 }
 
-try {
+await runArtiumProof(async guardCallback => {
   createTestCertificates(scratch, ['localhost']);
   sites = [first, second];
-  vendor = createServer({ key: readFileSync(join(scratch, 'server.key')), cert: readFileSync(join(scratch, 'server.crt')) }, (request, response) => {
+  vendor = createServer({ key: readFileSync(join(scratch, 'server.key')), cert: readFileSync(join(scratch, 'server.crt')) }, guardCallback((request, response) => {
     const url = new URL(request.url, 'https://localhost');
     requests.push({ path: url.pathname, query: url.search, method: request.method });
     assert.equal(request.method, 'GET');
@@ -134,7 +135,7 @@ try {
       const data = sites.slice(offset, offset + Math.min(limit, mode === 'paged' ? 1 : limit));
       response.end(JSON.stringify(mode === 'bad-sites' ? { data: [{}] } : { offset, limit, count: data.length, totalCount: sites.length, data }));
     }
-  });
+  }));
   vendor.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
   vendor.listen(0, '127.0.0.1');
   await once(vendor, 'listening');
@@ -191,7 +192,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   assert.throws(() => connect(443, 'non-fake.invalid'), /forbids/);
   assert.equal(readFileSync(deniedLog, 'utf8'), 'denied\n');
   rmSync(deniedLog);
-  watcher = watch(calls, { recursive: true }, () => {
+  watcher = watch(calls, { recursive: true }, guardCallback(() => {
     const observe = path => {
       let entries;
       try { entries = readdirSync(path, { withFileTypes: true }); }
@@ -225,7 +226,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
       }
     };
     observe(calls);
-  });
+  }));
   await cli(['login', '--username', 'synthetic-user', '--password-stdin'], 0, password);
   report.installedExecutable = toolPaths['unifi-axi'];
   const installed = dirname(dirname(toolPaths['unifi-axi']));
@@ -499,7 +500,7 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   report.requests = requests;
   report.hostRuns = db.prepare("SELECT outcome, action, exit_code, duration_ms, stdout_bytes, stderr_bytes, error_code FROM audit WHERE event = 'run-terminal' ORDER BY id").all();
   report.result = 'passed-on-linux; native Windows PENDING';
-} finally {
+}, async () => {
   activeCli?.kill('SIGTERM');
   watcher?.close();
   await app?.close();
@@ -510,5 +511,5 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   healthDefaults.tickMs = report.defaultHealthTickMs;
   writeFileSync(join(output, 'artium-proof.json'), JSON.stringify(report, null, 2) + '\n');
   rmSync(scratch, { recursive: true, force: true });
-}
+});
 console.log(JSON.stringify({ result: report.result, cases: report.rows.length, evidence: join(output, 'artium-proof.json') }));

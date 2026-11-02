@@ -262,4 +262,4 @@ No `SECURITY.md` ships yet; the security policy is pending.
 
 ## License
 
-No `LICENSE` file ships yet; the license is pending.
+MIT. See [LICENSE](LICENSE).

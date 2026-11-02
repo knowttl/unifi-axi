@@ -154,6 +154,7 @@ Pass `--secret-output <absolute-path>` to `hotspot voucher` and `wifi broadcast`
 - `hotspot voucher delete-many` requires `--filter`, previews the matching IDs and restricts deletion to those IDs together with the original filter.
   An approved voucher that stops matching the filter can survive; the receipt remains `accepted` while any approved ID is still present.
 - Request bodies are validated against the selected contract and reject undeclared fields before any mutation.
+  Contract `date` and `date-time` fields in requests and responses must contain real calendar dates, including leap-year rules; impossible dates such as `2026-02-30` are rejected.
   For STANDARD WPA2_PERSONAL broadcasts, explicitly set `securityConfiguration.fastRoamingEnabled`; preview warns when it is missing.
 - Disruptive actions (restart, PoE power cycle, guest authorization) are accepted, not proven complete: receipts stay `accepted`.
 

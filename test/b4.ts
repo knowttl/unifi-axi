@@ -284,6 +284,46 @@ export async function verifyB4(h: Harness) {
         }
         retained = {}; omitGuarding = false;
       }
+      if (index === 2) {
+        for (const verb of ['create', 'update'] as const) {
+          for (const scenario of [
+            { label: 'omitted-mdns-true', supplied: undefined, readback: true, outcome: 'verified', deferred: false },
+            { label: 'omitted-mdns-false', supplied: undefined, readback: false, outcome: 'accepted', deferred: true },
+            { label: 'false-mdns-mismatch', supplied: false, readback: true, outcome: 'accepted', deferred: false },
+            { label: 'true-mdns-mismatch', supplied: true, readback: false, outcome: 'accepted', deferred: false },
+          ] as const) {
+            state = verb === 'create' ? [neighbour] : [neighbour, { ...body, id, default: false, metadata: responseMetadata }];
+            const requested: Record<string, unknown> = { ...body };
+            if (scenario.supplied === undefined) delete requested.mdnsForwardingEnabled;
+            else requested.mdnsForwardingEnabled = scenario.supplied;
+            retained = { mdnsForwardingEnabled: scenario.readback };
+            writeFileSync(bodyFile, JSON.stringify(requested));
+            const args = ['network', verb, '--body-file', bodyFile, ...(verb === 'update' ? ['--network-id', id] : [])];
+            const preview = (await run(args)).preview;
+            assert.deepEqual(preview.body, requested);
+            const requestId = `${verb}-${scenario.label}-${version}`;
+            const execute = [...args, '--execute', '--confirm', preview.confirmation, '--request-id', requestId];
+            const before = sent.length;
+            failAfterAck = scenario.deferred;
+            assert.equal((await run(execute)).write.outcome, scenario.outcome, `${verb}: ${scenario.label}`);
+            failAfterAck = false;
+            assert.deepEqual(sent.slice(before), [{ method: verb === 'create' ? 'POST' : 'PUT',
+              path: `/proxy/network/integration/v1/sites/${site}/networks${verb === 'update' ? `/${id}` : ''}`, body: requested }]);
+            const outcome = scenario.supplied === undefined ? 'verified' : 'accepted';
+            assert.deepEqual((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation, { outcome, readOnly: true });
+            assert.equal((await run(execute)).write.outcome, outcome);
+            if (scenario.supplied !== undefined) {
+              state[1]!.mdnsForwardingEnabled = scenario.supplied;
+              assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).write.outcome, 'verified');
+            }
+            assert.equal(sent.length, before + 1, 'mDNS reconciliation and replay send no mutation');
+            assert.deepEqual(state[0], neighbour);
+            rows.push({ task: 'B4.1', operation: verb === 'create' ? 'OP-049' : 'OP-052', version,
+              status: 'passed', direction: `${verb}-${scenario.label}` });
+          }
+        }
+        retained = {};
+      }
       const remove = ['network', 'delete', '--network-id', id];
       const defaultConfirmation = (await run(remove)).preview.confirmation;
       assert.equal((await run([...remove, '--force', 'false'])).preview.confirmation, defaultConfirmation);

@@ -51,7 +51,9 @@ function normalizeProtocols(value: unknown): void {
 
 function networkProjection(body: Record<string, unknown>): Record<string, unknown> {
   // NORM-001 treats omitted and null DHCP guarding as disabled in both directions.
-  return { ...body, dhcpGuarding: body.dhcpGuarding ?? null };
+  const projection: Record<string, unknown> = { ...body, dhcpGuarding: body.dhcpGuarding ?? null };
+  if (projection.mdnsForwardingEnabled === undefined) delete projection.mdnsForwardingEnabled;
+  return projection;
 }
 
 function validateTrafficList(body: Record<string, unknown>): void {

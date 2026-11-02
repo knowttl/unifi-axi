@@ -97,6 +97,8 @@ Reading notes:
   Versions 10.6.109 and 11.0.97 select their matching contract.
   An unknown version returns `UNVERIFIED_API_VERSION`.
   A profile `apiContract` of one of those versions permits read-only investigation that stays visibly `unverified`, and never enables writes.
+- `api.writesAvailable` reports whether a network write is authorized on a shipped application version outside Windows.
+  It requires `writes.allowWrites: true`, no read-only override, and either `deleteNetwork` or a matching create/update operation and management variant grant (`UNMANAGED`, `SWITCH` or `GATEWAY`).
 - Long text is bounded to 1,000 characters plus an ellipsis; `--full` on `info` and `client list` shows more, still redacted.
 
 Write commands follow the same preview, confirm and recover pattern, take `--body-file <path>` where a body is needed, and are described in [Safety](#safety).
@@ -133,6 +135,9 @@ Pass `--secret-output <absolute-path>` to `hotspot voucher` and `wifi broadcast`
   Reusing an owned request ID runs read-only reconciliation instead of resending.
   `write reconcile` records a separate observation; receipts distinguish `not-sent`, `unknown`, `rejected`, `accepted`, `verified` and `no-op`, with an audit ID.
   A lost acknowledgement stays `unknown`, and a similar resource never proves creation.
+  Network update verification checks replacement expectations, including omitted settings, rather than only submitted fields.
+  Network create/update verification treats omitted and null `dhcpGuarding` as disabled; retained enabled guarding keeps the receipt `accepted`.
+  Omitted gateway `mdnsForwardingEnabled` delegates to the site default, so either read-back boolean can verify; an explicitly supplied boolean must match.
   Device adoption matches pending/adopted devices and acknowledgement MAC addresses case-insensitively, while confirmation and request-ID binding retain the submitted body's casing.
   Voucher creation and bulk-deletion reconciliation compare UUIDs case-insensitively.
 - HTTP 4xx mutation responses produce terminal `rejected` receipts with sanitized vendor diagnostics.

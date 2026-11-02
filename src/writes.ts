@@ -49,6 +49,11 @@ function normalizeProtocols(value: unknown): void {
   Object.values(record).forEach(normalizeProtocols);
 }
 
+function networkProjection(body: Record<string, unknown>): Record<string, unknown> {
+  // NORM-001 treats omitted and null DHCP guarding as disabled in both directions.
+  return { ...body, dhcpGuarding: body.dhcpGuarding ?? null };
+}
+
 function validateTrafficList(body: Record<string, unknown>): void {
   const family = body.type === 'IPV4_ADDRESSES' ? 4 : 6;
   const valid = (body.items as Record<string, unknown>[]).every(item => {
@@ -236,10 +241,11 @@ async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> 
   const request = { operation: operation.id === 'OP-049' ? catalogue.find(op => op.id === 'OP-050')! :
     operation.id === 'OP-019' ? catalogue.find(op => op.id === 'OP-020')! : operation,
     site: record.site, target: record.target, body: null, selectors: record.selectors ?? {} };
-  const state = await selectedState(ctx, request) as Record<string, unknown> | null;
+  let state = await selectedState(ctx, request) as Record<string, unknown> | null;
   // Resource reads cannot prove a restart, power cycle or this invocation's guest authorization completed.
   if (actions.has(operation.id)) return record.outcome;
   if (operation.id === 'OP-019' && state) state.macAddress = (state.macAddress as string).toLowerCase();
+  if (state && ['OP-049', 'OP-052'].includes(operation.id)) state = networkProjection(state);
   if (operation.command.startsWith('firewall policy ')) normalizeProtocols(state);
   if (operation.method === 'DELETE') return state === null && ['accepted', 'verified', 'no-op'].includes(record.outcome) ? 'verified' : record.outcome;
   if (state && ['accepted', 'verified'].includes(record.outcome) && digest(Object.fromEntries(record.bodyKeys.map(key => [key, state[key]]))) === record.bodyHash) return 'verified';
@@ -284,10 +290,11 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
   let projection = request.body;
   if (operation.id === 'OP-019') projection = { macAddress: (request.body!.macAddress as string).toLowerCase() };
   if (operation.id === 'OP-045') projection = Object.fromEntries(Object.entries(request.body!).filter(([key]) => key !== 'count'));
-  if (operation.method === 'PUT' && !ordering[operation.id] && operation.id !== 'OP-052') {
+  if (operation.method === 'PUT' && !ordering[operation.id]) {
     projection = contractValidator(ctx.api.contract!).replacementProjection(
       `#/paths/${escape(operation.path)}/put/requestBody/content/application~1json/schema`, request.body!);
   }
+  if (['OP-049', 'OP-052'].includes(operation.id)) projection = networkProjection(projection!);
   if (['OP-031', 'OP-037'].includes(operation.id) && ctx.api.contract === '11.0.97' && !Object.hasOwn(request.body!, 'reportFlowEnabled')) {
     projection = { ...projection, reportFlowEnabled: true };
   }

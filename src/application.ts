@@ -23,7 +23,8 @@ export async function application(profile: Profile, secret: string, peer?: PeerI
   return { information, api: { applicationVersion: actual,
     contract: verified ? actual : profile.apiContract ?? null,
     status: verified ? 'verified' : 'unverified', writesAvailable: verified && process.platform !== 'win32' &&
-      (writeAllowed(profile, ['deleteNetwork']) || writeAllowed(profile, ['createNetwork', 'createNetwork:UNMANAGED'])) } };
+      (writeAllowed(profile, ['deleteNetwork']) || ['createNetwork', 'updateNetwork'].some(operation =>
+        ['UNMANAGED', 'SWITCH', 'GATEWAY'].some(management => writeAllowed(profile, [operation, `${operation}:${management}`])))) } };
 }
 
 // Schema validation precedes pagination checks on safe local counters.

@@ -39,6 +39,27 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
         assert.equal(result.selectedSite, first.id);
       } else assert.equal(requests().length, 1, 'Info and doctor read only application information');
     }
+    for (const [label, operations, allowed] of [
+      ['delete', ['deleteNetwork'], true],
+      ['unmanaged create', ['createNetwork', 'createNetwork:UNMANAGED'], true],
+      ['switch create', ['createNetwork', 'createNetwork:SWITCH'], true],
+      ['gateway create', ['createNetwork', 'createNetwork:GATEWAY'], true],
+      ['unmanaged update', ['updateNetwork', 'updateNetwork:UNMANAGED'], true],
+      ['switch update', ['updateNetwork', 'updateNetwork:SWITCH'], true],
+      ['gateway update', ['updateNetwork', 'updateNetwork:GATEWAY'], true],
+      ['operation without variant', ['updateNetwork'], false],
+      ['variant without operation', ['updateNetwork:GATEWAY'], false],
+      ['mismatched operation and variant', ['createNetwork', 'updateNetwork:GATEWAY'], false],
+    ]) {
+      configure({ lab: { ...profile, writes: { allowWrites: true, operations } } });
+      seed(serve);
+      assert.equal((await cli(['info'])).api.writesAvailable, allowed && process.platform !== 'win32', `${label} availability on ${version} (#24)`);
+    }
+    configure({ lab: { ...profile, writes: { allowWrites: false, operations: ['deleteNetwork'] } } });
+    assert.equal((await cli(['info'])).api.writesAvailable, false, 'Standing write permission is required');
+    configure({ lab: { ...profile, writes: { allowWrites: true, operations: ['updateNetwork', 'updateNetwork:GATEWAY'] } } });
+    assert.equal((await cli(['info'], 0, { UNIFI_AXI_READ_ONLY: 'true' })).api.writesAvailable, false, 'Read-only override wins over grants');
+    configure({ lab: profile });
   }
 
   seed(serve);
@@ -132,7 +153,7 @@ export async function verifyApplication({ cli, configure, trusted, config, seed,
     assert.deepEqual(result.api, { applicationVersion: version, contract: null, status: 'unverified', writesAvailable: false });
     assert.equal(requests().length, 1, 'Unknown versions stop after version bootstrap');
   }
-  configure({ lab: { ...profile, apiContract: '11.0.97', writes: { allowWrites: true, operations: ['OP-006'] } } });
+  configure({ lab: { ...profile, apiContract: '11.0.97', writes: { allowWrites: true, operations: ['updateNetwork', 'updateNetwork:GATEWAY'] } } });
   const investigated = await cli([]);
   assert.deepEqual(investigated.api, { applicationVersion: version, contract: '11.0.97', status: 'unverified', writesAvailable: false });
   seed(serve);

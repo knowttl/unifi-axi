@@ -119,6 +119,13 @@ export async function verifyInventory({ cli, seed }) {
     });
     // The fake returns the documented HTTP failure for both absent and cross-site targets.
     assert.deepEqual((await cli(['client', 'show', '--site', site, '--client-id', id])).client, client);
+    const leapClient = { ...client, connectedAt: '2024-02-29T23:30:00.123-02:00' };
+    serve(() => leapClient);
+    assert.deepEqual((await cli(['client', 'show', '--site', site, '--client-id', id])).client, leapClient);
+    serve(() => ({ ...client, connectedAt: '2026-02-30T12:00:00Z' }));
+    const invalidTimestamp = (await cli(['client', 'show', '--site', site, '--client-id', id], 1)).error;
+    assert.equal(invalidTimestamp.code, 'RESPONSE_INVALID');
+    assert.match(invalidTimestamp.message, /\/connectedAt: invalid date/);
     serve((url, response) => {
       assert.ok(url.pathname.includes(otherSite) || url.pathname.endsWith(secondId));
       response.writeHead(404); response.end();

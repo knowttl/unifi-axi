@@ -12,6 +12,24 @@ const canonical = value => value && typeof value === 'object'
 const rows = [];
 for (const version of ['10.6.109', '11.0.97']) {
   const validator = contractValidator(version);
+  const policy = fixtures.find(fixture => fixture.version === version && fixture.pointer.endsWith('/Firewall policy'));
+  for (const field of ['startDate', 'stopDate']) {
+    for (const [value, valid] of [
+      ['2024-02-29', true], ['2000-02-29', true], ['1900-02-29', false],
+      ['2026-02-29', false], ['2026-02-30', false], ['2026-04-31', false],
+    ]) {
+      const errors = validator.validate(policy.pointer, { ...policy.value, schedule: { ...policy.value.schedule, [field]: value } });
+      assert.equal(errors.length === 0, valid, `${field} ${value} on ${version} (#8)`);
+      if (!valid) assert.ok(errors.some(error => error.startsWith(`/schedule/${field}: invalid date`)));
+    }
+  }
+  for (const [value, valid] of [
+    ['2024-02-29T12:00:00Z', true], ['2024-02-29T23:30:00.123-02:00', true],
+    ['2026-02-30T12:00:00Z', false], ['1900-02-29T12:00:00+02:00', false],
+  ]) {
+    const errors = validator.validate('#/components/schemas/Client details/properties/connectedAt', value);
+    assert.equal(errors.length === 0, valid, `${value} on ${version} (#11)`);
+  }
   for (const fixture of fixtures.filter(fixture => fixture.version === version)) {
     const before = structuredClone(fixture.value);
     assert.deepEqual(validator.validate(fixture.pointer, fixture.value), [], fixture.id);

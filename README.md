@@ -88,6 +88,7 @@ Reading notes:
   An explicit `--limit N` caps the returned rows; `complete: false` and `nextOffset` identify where to resume with `--offset`.
   Without `--limit`, enumeration uses pages of 25 (100 for vouchers) until complete within the read budget.
   `--limit 0` reads metadata only.
+  Voucher and Wi-Fi lists retain this pagination metadata on stdout when using `--secret-output`, alongside exported IDs and the delivery receipt.
 - Enumeration is bounded to 100 pages, 10,000 rows, eight MiB across responses and thirty seconds, then fails with `READ_INCOMPLETE` and guidance.
 - Details verify the returned ID against the requested resource and never substitute a similar resource.
 - Select a site with `--site <site-id>`, then the profile `siteId`, then the sole discovered site.
@@ -205,6 +206,9 @@ Keep all certificate verification enabled, then check the profile with `unifi-ax
 
 - Output is TOON on stdout, except `-v`, `-V` and `--version`, which print the bare package version.
 - Errors use structured codes, for example `PROFILE_REQUIRED`, `PROFILE_NOT_FOUND`, `PROFILE_AMBIGUOUS`, `AUTH_REQUIRED`, `RESPONSE_INVALID`, `READ_INCOMPLETE`, `TIMEOUT`, `UPSTREAM_ERROR`, `CONTRACT_CONFLICT`, `INVALID_ARGUMENT` and `NOT_IMPLEMENTED`.
+- API failures include `upstream.status` and, when available, sanitized vendor `code`, `message` and `requestId` fields.
+  HTTP 404 reads return `NOT_FOUND`; other HTTP read failures return `UPSTREAM_ERROR`, with guidance for the failure.
+  Mutation refusals follow the receipt rules in [Safety](#safety).
 - Exit code 0 is success, 1 is a command error, and 2 is a usage error such as an unknown command, unknown flag, duplicate flag or invalid scalar value.
 - Each API request has a ten-second deadline, at most two reads run concurrently, and each response is bounded to one MiB.
 - Reads retry transport failures and HTTP 502, 503 and 504 at most twice within the deadline.

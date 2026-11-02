@@ -25,6 +25,8 @@ const cases: { operation: string; command: string[]; grant: string; body: Row | 
     body: { macAddress, ignoreDeviceLimit: false }, suffix: '/devices', outcome: 'verified' },
   { operation: 'OP-019', command: ['device', 'adopt'], grant: 'adoptDevice',
     body: { macAddress, ignoreDeviceLimit: true }, suffix: '/devices', outcome: 'verified' },
+  { operation: 'OP-019', command: ['device', 'adopt'], grant: 'adoptDevice',
+    body: { macAddress: '02:AB:CD:EF:01:23', ignoreDeviceLimit: false }, suffix: '/devices', outcome: 'verified' },
   { operation: 'OP-020', command: ['device', 'remove', '--device-id', id], grant: 'removeDevice',
     body: null, suffix: `/devices/${id}`, outcome: 'verified' },
   { operation: 'OP-022', command: ['device', 'action', '--device-id', id], grant: 'executeAdoptedDeviceAction',
@@ -46,14 +48,16 @@ export async function verifyGuestDevices(h: Harness) {
       if (process.platform === 'win32') { rows.push({ task: h.task, status: 'pending-native-windows' }); continue; }
       const guest = entry.operation === 'OP-016';
       const adopt = entry.operation === 'OP-019';
+      const adoptedDevice = { ...device, macAddress: adopt ? (entry.body!.macAddress as string).toLowerCase() : macAddress };
       const neighbour = { ...(guest ? client : device), id: neighbourId, macAddress: '02:00:00:00:00:02', name: 'Untouched neighbour' };
       let state: Row[] = [neighbour, ...(adopt ? [] : [structuredClone(guest ? client : device)])];
       if (entry.body?.action === 'UNAUTHORIZE_GUEST_ACCESS') state[1] = { ...client,
         access: { type: 'GUEST', authorized: true, authorization } };
-      const pending = { macAddress, ipAddress: '192.0.2.10', model: 'SYNTHETIC', state: 'PENDING_ADOPTION',
+      const pending = { macAddress: adoptedDevice.macAddress, ipAddress: '192.0.2.10', model: 'SYNTHETIC', state: 'PENDING_ADOPTION',
         supported: true, firmwareUpdatable: false, features: ['switching'], adoptionTargetSiteIds: [site] };
       let available = true;
       let failure = false;
+      let wrongAdoptionAck = false;
       let completed = 0;
       let changingUsage = false;
       let changeAuthorizationAt = Infinity;
@@ -102,7 +106,8 @@ export async function verifyGuestDevices(h: Harness) {
             state = state.map(row => row.id === id ? { ...row, access: { type: 'GUEST', authorized,
               ...(authorized ? { authorization } : {}) } } : row);
             result = { action: entry.body!.action, ...(authorized ? { grantedAuthorization: authorization } : { revokedAuthorization: authorization }) };
-          } else if (adopt) { state.push(device); available = false; result = device; }
+          } else if (adopt) { state.push(adoptedDevice); available = false;
+            result = wrongAdoptionAck ? { ...adoptedDevice, macAddress: neighbour.macAddress } : adoptedDevice; }
           else if (entry.operation === 'OP-020') state = state.filter(row => row.id !== id);
           response.statusCode = 200;
           response.end(result === undefined ? '' : JSON.stringify(result));
@@ -124,6 +129,11 @@ export async function verifyGuestDevices(h: Harness) {
       }
       const confirmation = (await run(args)).preview.confirmation;
       assert.equal(sent.length, 0, 'Preview sends zero mutations');
+      if (adopt && entry.body!.macAddress !== adoptedDevice.macAddress) {
+        pending.ipAddress = '192.0.2.11';
+        assert.equal((await run(execute(confirmation, 'pending-drift'), 1)).error.code, 'CONFIRMATION_MISMATCH');
+        pending.ipAddress = '192.0.2.10';
+      }
       if (entry.body) {
         writeFileSync(bodyFile, JSON.stringify({ ...entry.body, ...(entry.body.action ? { action: 'UNSUPPORTED' } : { ignoreDeviceLimit: 'false' }) }));
         assert.equal((await run(args, 1)).error.code, 'INVALID_ARGUMENT');
@@ -153,10 +163,24 @@ export async function verifyGuestDevices(h: Harness) {
       assert.deepEqual(state[0], neighbour);
       if (guest) assert.deepEqual(state[1], { ...client, access: { type: 'GUEST', authorized: entry.body!.action === 'AUTHORIZE_GUEST_ACCESS',
         ...(entry.body!.action === 'AUTHORIZE_GUEST_ACCESS' ? { authorization } : {}) } });
-      else assert.deepEqual(state, entry.operation === 'OP-020' ? [neighbour] : [neighbour, device]);
+      else assert.deepEqual(state, entry.operation === 'OP-020' ? [neighbour] : [neighbour, adoptedDevice]);
       assert.equal((await run(execute(confirmation, 'success'))).write.outcome, entry.outcome);
       assert.equal(sent.length, 2, 'Repeated request ID reads instead of resending');
       assert.equal(completed, 1);
+      if (adopt && entry.body!.macAddress !== adoptedDevice.macAddress) {
+        assert.equal(result.write.target, id, 'Matching MAC acknowledgement retains the returned UUID');
+        assert.equal((await run(['write', 'reconcile', '--request-id', `success-${index}-${version}`])).write.outcome, 'verified');
+        const adoptedConfirmation = (await run(args)).preview.confirmation;
+        state[1] = { ...adoptedDevice, name: 'Changed adopted device' };
+        assert.notEqual((await run(args)).preview.confirmation, adoptedConfirmation, 'Matched adopted state participates in confirmation');
+        state = [neighbour]; available = true; wrongAdoptionAck = true;
+        const mismatch = await run(execute((await run(args)).preview.confirmation, 'wrong-mac'), 1);
+        assert.equal(mismatch.write.outcome, 'unknown');
+        assert.equal(mismatch.write.target, null, 'Another MAC acknowledgement cannot establish an adopted UUID');
+        writeFileSync(bodyFile, JSON.stringify({ ...entry.body, macAddress: adoptedDevice.macAddress }));
+        assert.equal((await run(execute(confirmation, 'success'), 1)).error.code, 'WRITE_BINDING_MISMATCH');
+        writeFileSync(bodyFile, JSON.stringify(entry.body));
+      }
       if (guest) {
         changingUsage = true;
         for (const [stage, changedAt, error] of [

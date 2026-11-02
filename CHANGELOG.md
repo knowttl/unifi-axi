@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/knowttl/unifi-axi/compare/unifi-axi-v0.1.1...unifi-axi-v0.1.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* license the package under MIT ([#50](https://github.com/knowttl/unifi-axi/issues/50)) ([47ca7f3](https://github.com/knowttl/unifi-axi/commit/47ca7f30731fd97f983099ce35a832895bd8ed83))
+* reconcile device MACs and voucher UUIDs case-insensitively ([#48](https://github.com/knowttl/unifi-axi/issues/48)) ([a18c7a0](https://github.com/knowttl/unifi-axi/commit/a18c7a0d5b17a7403aa77bd749af471671cfc9c0))
+
 ## [0.1.1](https://github.com/knowttl/unifi-axi/compare/unifi-axi-v0.1.0...unifi-axi-v0.1.1) (2026-11-02)
 
 

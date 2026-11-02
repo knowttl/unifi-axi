@@ -1,19 +1,31 @@
 {
   "name": "@knowttl/unifi-axi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Protected credentials and verified transport for the UniFi Network Integration API",
   "type": "module",
-  "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "git+https://github.com/knowttl/unifi-axi.git" },
-  "bin": { "unifi-axi": "dist/bin.js" },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/knowttl/unifi-axi.git"
+  },
+  "bin": {
+    "unifi-axi": "dist/bin.js"
+  },
   "exports": {
     "./catalogue": "./dist/catalogue.js",
     "./capabilities": "./dist/capabilities.json",
     "./skill": "./dist/SKILL.md",
     "./credential-schema": "./dist/axi-credential.schema.json"
   },
-  "files": ["dist", "evidence/sources"],
-  "engines": { "node": ">=24.11.0" },
+  "files": [
+    "dist",
+    "evidence/sources"
+  ],
+  "engines": {
+    "node": ">=24.11.0"
+  },
   "packageManager": "pnpm@10.34.6",
   "scripts": {
     "build": "tsc && node scripts/metadata.mjs",
@@ -27,7 +39,10 @@
     "verify:contracts": "pnpm build && node scripts/verify-contracts.mjs",
     "verify:artium": "node scripts/verify-artium.mjs"
   },
-  "dependencies": { "@decimalturn/toml-patch": "3.3.2", "@toon-format/toon": "2.3.1" },
+  "dependencies": {
+    "@decimalturn/toml-patch": "3.3.2",
+    "@toon-format/toon": "2.3.1"
+  },
   "devDependencies": {
     "@types/node": "24.10.0",
     "eslint": "9.39.1",

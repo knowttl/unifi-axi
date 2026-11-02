@@ -9,6 +9,8 @@ import { readOperation } from './reads.js';
 import { setup } from './integrations.js';
 import { foundationWrites, inspectWrite, writeOperation } from './writes.js';
 import { exportResponse, secretReads } from './secret-output.js';
+import { UpstreamError } from './transport.js';
+import { contractValidator } from './validation.js';
 
 const auxiliary = [
   { command: 'commands', summary: 'List all documented vendor commands', status: 'implemented' },
@@ -35,7 +37,7 @@ function flagsFor(operation?: Operation): Flag[] {
   if (secretReads.has(operation.id) || ['OP-045', 'OP-070', 'OP-073'].includes(operation.id)) flags.push({ name: 'secret-output', type: 'string', required: false });
   for (const parameter of operation.contracts[0]!.parameters) {
     flags.push({ name: parameterFlag(parameter.name), type: parameter.schema.type ?? 'string',
-      required: parameter.required ?? false, default: parameter.schema.default, schema: parameter.schema });
+      required: parameter.name !== 'siteId' && (parameter.required ?? false), default: parameter.schema.default, schema: parameter.schema });
   }
   if (operation.contracts.some(contract => contract.requestBody)) {
     flags.push({ name: 'body-file', type: 'string', required: false });
@@ -63,6 +65,9 @@ export async function main(args: string[]): Promise<number> {
   const operation = catalogue.find(entry => entry.command === command);
   const extra = auxiliary.find(entry => entry.command === command);
   const children = [...catalogue, ...auxiliary].filter(entry => entry.command.startsWith(`${command} `));
+  if (command && !operation && !extra && children.length === 0) {
+    return output({ error: { code: 'UNKNOWN_COMMAND', message: 'Unknown command.' }, help: ['unifi-axi commands', 'unifi-axi --help'] }, 2);
+  }
   const flags = flagsFor(operation);
   if (['', 'doctor', 'auth status', 'profile list', 'profile configure', 'config path', 'write show', 'write reconcile'].includes(command)) {
     flags.push({ name: 'config', type: 'string', required: false }, { name: 'profile', type: 'string', required: false });
@@ -106,15 +111,21 @@ export async function main(args: string[]): Promise<number> {
     }
   }
 
-  if (command && !operation && !extra && children.length === 0) {
-    return output({ error: { code: 'UNKNOWN_COMMAND', message: 'Unknown command.' }, help: ['unifi-axi commands', 'unifi-axi --help'] }, 2);
-  }
   if (seen.has('help')) {
     if (operation) {
       return output({ command, summary: operation.summary, status: operation.status,
         effect: operation.effect, method: operation.method, path: operation.path,
         permission: 'Local Integration API key; effective upstream permissions unverified.',
         output: foundationWrites.has(operation.id) ? 'Preview by default. Execution requires exact grants, matching confirmation and a stable request ID.' : operation.status === 'implemented' ? 'Validated read data with actual Network version and selected contract.' : 'No vendor output until implemented. This operation fails before network access.',
+        ...(operation.contracts.some(contract => contract.requestBody) ? {
+          bodyFile: 'JSON request bodies must be owner-only files (chmod 600 on POSIX; protected ACL on Windows).',
+          requestBody: operation.contracts.map(contract => ({
+            version: contract.version, contract: `evidence/sources/network-${contract.version}-openapi.json`,
+            schema: (contract.requestBody as { content: { 'application/json': { schema: { $ref: string } } } }).content['application/json'].schema.$ref,
+            shape: contractValidator(contract.version).requestFields(
+              `#/paths/${operation.path.replaceAll('~', '~0').replaceAll('/', '~1')}/${operation.method.toLowerCase()}/requestBody/content/application~1json/schema`),
+          })),
+        } : {}),
         flags: flags.map(({ name, type, required, default: fallback }) => ({
           name: `--${name}`, type, required, default: fallback ?? null,
         })), examples: examplesFor(operation) });
@@ -161,7 +172,8 @@ export async function main(args: string[]): Promise<number> {
     } catch (error) {
       const known = error instanceof ToolError;
       console.log(redactor.text(encode({ error: { code: known ? error.code : 'WRITE_FAILED',
-        message: known ? error.message : 'Unable to persist or inspect private write ownership. No automatic retry is permitted.' } })));
+        message: known ? error.message : 'Unable to persist or inspect private write ownership. No automatic retry is permitted.' },
+        ...(error instanceof UpstreamError ? { upstream: error.upstream, help: [`unifi-axi ${command} --help`] } : {}) })));
       return 1;
     }
   }
@@ -242,7 +254,7 @@ export async function main(args: string[]): Promise<number> {
       let siteId: string | undefined;
       try {
         if (command === '' && !listing.complete && requested === undefined) throw new ToolError('SITE_AMBIGUOUS', 'Select a site with --site <site-id>; the home view is bounded.');
-        if (command === '' || requested !== undefined || listing.sites.length === 1) siteId = selectSite(listing.sites, requested);
+        if (command === '' || requested !== undefined || (listing.totalCount === 1 && listing.sites.length === 1)) siteId = selectSite(listing.sites, requested);
       } catch (error) {
         if (!(error instanceof ToolError)) throw error;
         return emit({ ...result, ...listing, error: { code: error.code, message: error.message },
@@ -256,7 +268,14 @@ export async function main(args: string[]): Promise<number> {
       const context = `${profileContext}${configContext}`;
       console.log(redactor.text(encode({ ...identity, ...(api ? { api } : {}), error: { code: known ? error.code : 'CONFIG_INVALID',
         message: known ? error.message : 'Unable to read or write protected configuration.' },
-        help: [`unifi-axi auth status${context}`,
+        ...(error instanceof UpstreamError ? { upstream: error.upstream } : {}),
+        help: error instanceof UpstreamError && ![401, 403].includes(error.upstream.status) ?
+          error.upstream.status === 400 ? [
+            `Check identifiers and filter syntax with unifi-axi ${command || 'info'} --help.`,
+            `Use a site UUID from unifi-axi site list${context}.`,
+          ] : error.upstream.status === 404 ? [`unifi-axi ${command.endsWith(' show') ? command.replace(/ show$/, ' list') : 'site list'}${context}${values.site ? ` --site ${quote(values.site)}` : ''}`] :
+            ['The API could not complete this read. Retry the read later.'] :
+          [`unifi-axi auth status${context}`,
           `unifi-axi profile configure${profileContext || ' --profile <name>'}${configContext} --file <absolute-profile-json>`,
           ...(['', 'site list'].includes(command) ? [`unifi-axi site list${context}${values.site ? ` --site ${quote(values.site)}` : ''}`] : [])] })));
       return 1;

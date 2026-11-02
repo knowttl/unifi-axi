@@ -9,7 +9,9 @@ interface Result {
   preview: { confirmation: string; identity: string; body: Record<string, unknown> | null };
   write: { outcome: string; auditId: string; target: string | null; targets?: string[] };
   delivery?: { path: string; delivered: boolean };
-  error: { code: string };
+  error: { code: string; message: string };
+  upstream?: { status: number; code?: string; message?: string; requestId?: string };
+  warnings?: string[];
   reconciliation: { outcome: string; readOnly: boolean };
 }
 export interface Harness {

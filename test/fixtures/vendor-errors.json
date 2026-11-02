@@ -1,0 +1,7 @@
+{
+  "wifiFastRoaming": {
+    "code": "BAD_REQUEST",
+    "message": "WPA security combined with standard WiFi requires fast roaming setting",
+    "requestId": "synthetic-request"
+  }
+}

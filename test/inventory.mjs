@@ -73,9 +73,9 @@ export async function verifyInventory({ cli, seed }) {
         return { offset, limit: 1, count: 1, totalCount: 2, data };
       });
       const result = await cli([...scoped(command), '--limit', '1', ...(command === 'wan list' ? [] : ['--filter', filter])]);
-      assert.deepEqual(result[key], records);
-      assert.deepEqual([result.count, result.totalCount, result.complete], [2, 2, true]);
-      rows.push({ command, version, status: 'passed', direction: 'filtered-multi-page' });
+      assert.deepEqual(result[key], records.slice(0, 1));
+      assert.deepEqual([result.count, result.totalCount, result.complete, result.nextOffset], [1, 2, false, 1]);
+      rows.push({ command, version, status: 'passed', direction: 'filtered-capped-list' });
       if (['device list', 'client list', 'network list'].includes(command)) {
         serve(() => ({ offset: 0, limit: 25, count: 0, totalCount: 0, data: [] }));
         const empty = await cli(scoped(command));
@@ -124,7 +124,7 @@ export async function verifyInventory({ cli, seed }) {
       response.writeHead(404); response.end();
     });
     for (const [selectedSite, selectedId] of [[site, secondId], [otherSite, id]]) {
-      assert.equal((await cli(['client', 'show', '--site', selectedSite, '--client-id', selectedId], 1)).error.code, 'UPSTREAM_ERROR');
+      assert.equal((await cli(['client', 'show', '--site', selectedSite, '--client-id', selectedId], 1)).error.code, 'NOT_FOUND');
     }
 
     const variants = [

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Harness } from './writes.ts';
+import vendorErrors from './fixtures/vendor-errors.json' with { type: 'json' };
 
 const site = '9361553d-e20d-45b8-a516-6948ab010011';
 const ids = [1, 2, 3, 4, 5].map(n => `8c850c83-1111-4111-8111-${String(n).padStart(12, '0')}`);
@@ -87,7 +88,7 @@ export async function verifyWifiVouchers(h: Harness) {
       let state = [neighbour];
       const mutations: { method: string; path: string; body: unknown }[] = [];
       let injectLate = false;
-      let badAck = false;
+      let badAck = 0;
       h.seed((request, response) => {
         assert.equal(request.headers['x-api-key'], h.syntheticKey);
         const url = new URL(request.url!, h.trusted.origin);
@@ -103,7 +104,7 @@ export async function verifyWifiVouchers(h: Harness) {
         request.on('end', () => {
           const parsed = bytes ? JSON.parse(bytes) as Row : null;
           mutations.push({ method: request.method!, path: request.url!, body: parsed });
-          if (badAck) { response.statusCode = 403; response.end('{}'); return; }
+          if (badAck) { response.statusCode = badAck; response.end(badAck === 400 ? JSON.stringify(vendorErrors.wifiFastRoaming) : '{}'); return; }
           let result: unknown;
           if (request.method === 'POST') {
             const count = Number(parsed!.count ?? 1);
@@ -136,6 +137,34 @@ export async function verifyWifiVouchers(h: Harness) {
         state = [neighbour];
         const requested = { ...body, ...(count === 3 ? { count } : {}) };
         writeFileSync(bodyFile, JSON.stringify(requested), { mode: 0o600 });
+        if (family === 'wifi') {
+          const previewArgs = [...prefix, 'create', '--body-file', bodyFile];
+          assert.match((await run(previewArgs)).warnings![0]!, /fastRoamingEnabled/);
+          const refusedConfirmation = (await run(previewArgs)).preview.confirmation;
+          const refusedId = `missing-fast-roaming-${version}`;
+          badAck = 400;
+          const refused = await run(execute(previewArgs, refusedConfirmation, refusedId), 1);
+          assert.equal(refused.write.outcome, 'rejected');
+          assert.deepEqual(refused.upstream, { status: 400, ...vendorErrors.wifiFastRoaming });
+          const afterRefusal = mutations.length;
+          assert.equal((await run(['write', 'reconcile', '--request-id', refusedId], 1)).write.outcome, 'rejected');
+          assert.equal((await run(execute(previewArgs, refusedConfirmation, refusedId), 1)).error.code, 'WRITE_REJECTED');
+          assert.equal(mutations.length, afterRefusal);
+          badAck = 0;
+          writeFileSync(bodyFile, JSON.stringify({ ...requested, securityConfiguration: { ...wifi.securityConfiguration, fastRoamingEnabled: false } }));
+          assert.equal((await run(previewArgs)).warnings, undefined);
+          writeFileSync(bodyFile, JSON.stringify(requested));
+          chmodSync(bodyFile, 0o644);
+          const insecure = await run(previewArgs, 1);
+          assert.equal(insecure.error.code, 'CONFIG_INSECURE');
+          assert.match(insecure.error.message, /chmod 600/);
+          chmodSync(bodyFile, 0o600);
+          const missing = await run([...prefix, 'create', '--body-file', join(h.home, 'absent-body.json')], 1);
+          assert.match(missing.error.message, /exists and is readable/);
+          writeFileSync(bodyFile, '{');
+          assert.match((await run(previewArgs, 1)).error.message, /valid JSON/);
+          writeFileSync(bodyFile, JSON.stringify(requested));
+        }
         const destination = join(h.home, `${family}-${version}-${count}-secrets.json`);
         const args = [...prefix, 'create', '--body-file', bodyFile, '--secret-output', destination];
         h.configure({ lab: { ...profile, allowSecretExport: false } });
@@ -226,9 +255,18 @@ export async function verifyWifiVouchers(h: Harness) {
       }
       const args = [...prefix, 'delete', targetFlag, id];
       const confirmation = (await run(args)).preview.confirmation;
-      badAck = true;
-      assert.equal((await run(execute(args, confirmation, `delete-denied-${family}-${version}`), 1)).write.outcome, 'unknown');
-      badAck = false;
+      for (const [status, outcome] of [[403, 'rejected'], [500, 'unknown']] as const) {
+        badAck = status;
+        const deniedId = `delete-denied-${family}-${version}-${status}`;
+        const denied = await run(execute(args, confirmation, deniedId), 1);
+        assert.equal(denied.write.outcome, outcome);
+        assert.deepEqual(denied.upstream, { status });
+        assert.equal((await run(['write', 'reconcile', '--request-id', deniedId], 1)).write.outcome, outcome);
+        const afterDenial = mutations.length;
+        assert.equal((await run(execute(args, confirmation, deniedId), 1)).error.code, outcome === 'rejected' ? 'WRITE_REJECTED' : 'OUTCOME_UNKNOWN');
+        assert.equal(mutations.length, afterDenial, 'Stored request IDs never resend');
+      }
+      badAck = 0;
       assert.equal((await run(execute(args, confirmation, `delete-${family}-${version}`))).write.outcome, 'verified');
       assert.deepEqual(state, [neighbour]);
       rows.push({ task: family === 'wifi' ? 'B4.7' : 'B4.8', operation: family === 'wifi' ? 'OP-071' : 'OP-046', version,

@@ -6,7 +6,8 @@ import { once } from 'node:events';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:https';
 import { join } from 'node:path';
-import { readJson } from '../dist/transport.js';
+import { readJson, sendMutation } from '../dist/transport.js';
+import vendorErrors from './fixtures/vendor-errors.json' with { type: 'json' };
 
 let temporary, key, cert, fingerprint;
 before(() => {
@@ -22,12 +23,12 @@ before(() => {
 });
 after(() => { if (temporary) rmSync(temporary, { recursive: true, force: true }); });
 
-async function service(t) {
+async function service(t, respond = (request, response) => response.end(JSON.stringify({ applicationVersion: '11.0.97' }))) {
   const requests = [];
   let connections = 0;
   const server = createServer({ key, cert }, (request, response) => {
     requests.push({ path: request.url, key: request.headers['x-api-key'] });
-    response.end(JSON.stringify({ applicationVersion: '11.0.97' }));
+    respond(request, response);
   });
   t.after(async () => {
     server.closeAllConnections();
@@ -56,4 +57,64 @@ test('never retries a pin mismatch or sends credentials', async t => {
   await assert.rejects(readJson(fixture.profile, 'synthetic-key', '/v1/info'), error => error.code === 'TLS_REJECTED');
   assert.equal(fixture.connections(), 1);
   assert.deepEqual(fixture.requests, []);
+});
+
+for (const [status, code] of [[400, 'UPSTREAM_ERROR'], [404, 'NOT_FOUND'], [500, 'UPSTREAM_ERROR']]) {
+  test(`preserves bounded vendor diagnostics for HTTP ${status}`, async t => {
+    const fixture = await service(t, (request, response) => {
+      response.statusCode = status;
+      response.end(JSON.stringify({ ...vendorErrors.wifiFastRoaming,
+        message: `${vendorErrors.wifiFastRoaming.message}\nsynthetic-key`, ignored: 'not retained' }));
+    });
+    await assert.rejects(readJson(fixture.profile, 'synthetic-key', '/v1/info'), error => {
+      assert.equal(error.code, code);
+      assert.deepEqual(error.upstream, { status, ...vendorErrors.wifiFastRoaming,
+        message: `${vendorErrors.wifiFastRoaming.message} [REDACTED]` });
+      assert.equal(error.message.includes('synthetic-key'), false);
+      return true;
+    });
+    assert.equal(fixture.requests.length, 1);
+  });
+}
+
+test('keeps an error status when the vendor returns a non-JSON error page', async t => {
+  const fixture = await service(t, (request, response) => {
+    response.statusCode = 404;
+    response.end('<html>private diagnostic</html>');
+  });
+  await assert.rejects(readJson(fixture.profile, 'synthetic-key', '/v1/info'), error =>
+    error.code === 'NOT_FOUND' && error.upstream.status === 404 && !error.message.includes('private diagnostic'));
+});
+
+test('keeps a definitive refusal when its error body exceeds the byte budget', async t => {
+  const fixture = await service(t, (request, response) => {
+    response.statusCode = 400;
+    response.end('x'.repeat(1024 * 1024 + 1));
+  });
+  await assert.rejects(readJson(fixture.profile, 'synthetic-key', '/v1/info'), error =>
+    error.code === 'UPSTREAM_ERROR' && error.upstream.status === 400);
+});
+
+test('removes request credentials from vendor mutation diagnostics', async t => {
+  const peer = { leaf: '', address: '' };
+  const fixture = await service(t, (request, response) => {
+    if (request.method === 'GET') { response.end('{}'); return; }
+    response.statusCode = 400;
+    response.end(JSON.stringify({ code: 'BAD_REQUEST', message: 'Refused synthetic-passphrase and synthetic-key' }));
+  });
+  await readJson(fixture.profile, 'synthetic-key', '/v1/info', undefined, peer);
+  await assert.rejects(sendMutation(fixture.profile, 'synthetic-key', '/v1/example', {
+    method: 'POST', body: JSON.stringify({ securityConfiguration: { passphrase: 'synthetic-passphrase' } }),
+    status: 201, peer, beforeSend: async () => {},
+  }), error => error.upstream.message === 'Refused [REDACTED] and [REDACTED]');
+  assert.equal(fixture.requests.length, 2);
+});
+
+test('uses the certificate DNS name with a pinned IP connection destination', async t => {
+  const fixture = await service(t);
+  const pinnedIp = { ...fixture.profile, origin: fixture.profile.origin.replace('localhost', '127.0.0.1') };
+  await assert.rejects(readJson(pinnedIp, 'synthetic-key', '/v1/info'), error => error.code === 'TLS_REJECTED');
+  assert.equal(fixture.requests.length, 0);
+  assert.deepEqual(await readJson(fixture.profile, 'synthetic-key', '/v1/info'), { applicationVersion: '11.0.97' });
+  assert.equal(fixture.requests.length, 1);
 });

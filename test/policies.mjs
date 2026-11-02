@@ -102,17 +102,17 @@ export async function verifyPolicies({ cli, seed }) {
         response.writeHead(404); response.end();
       });
       const result = await run(`${command} list`, ['--limit', '1', '--filter', "name.ne('excluded')"]);
-      assert.deepEqual(result[key], records);
-      assert.deepEqual([result.count, result.totalCount, result.complete], [records.length, records.length, true]);
+      assert.deepEqual(result[key], records.slice(0, 1));
+      assert.deepEqual([result.count, result.totalCount], [1, records.length]);
       const detailKey = { aclRules: 'aclRule', dnsPolicies: 'dnsPolicy', trafficLists: 'trafficList',
         firewallZones: 'firewallZone', lags: 'lag', mcLagDomains: 'mcLagDomain', switchStacks: 'switchStack' }[key];
       for (const record of records) assert.deepEqual((await run(`${command} show`, [`--${flag}`, record.id]))[detailKey], record);
-      assert.equal((await cli([...`${command} show`.split(' '), '--site', otherSite, `--${flag}`, id], 1)).error.code, 'UPSTREAM_ERROR');
+      assert.equal((await cli([...`${command} show`.split(' '), '--site', otherSite, `--${flag}`, id], 1)).error.code, 'NOT_FOUND');
       if (command.startsWith('switching')) {
         serve(() => ({ offset: 0, limit: 25, count: 0, totalCount: 0, data: [] }));
         assert.deepEqual((await run(`${command} list`))[key], []);
         serve((url, response) => { response.writeHead(404); response.end(); });
-        assert.equal((await run(`${command} show`, [`--${flag}`, id], 1)).error.code, 'UPSTREAM_ERROR');
+        assert.equal((await run(`${command} show`, [`--${flag}`, id], 1)).error.code, 'NOT_FOUND');
       }
       rows.push({ command, version, status: 'passed', direction: 'filtered-list-and-details' });
     }

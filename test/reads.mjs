@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
+import vendorErrors from './fixtures/vendor-errors.json' with { type: 'json' };
 
 const records = Array.from({ length: 3 }, (_, index) => ({
   id: `9361553d-e20d-45b8-a516-6948ab01001${index}`, internalReference: `lab-${index}`, name: `Lab ${index}`,
@@ -21,9 +22,14 @@ export async function verifyReads({ cli, configure, trusted, seed, requests, ins
   };
   seed(serve);
   const result = await cli(['site', 'list', '--limit', '1', '--filter', "name.ne('excluded')"]);
-  assert.deepEqual(result.sites, records);
-  assert.deepEqual([result.count, result.totalCount, result.complete], [3, 3, true]);
-  assert.equal(requests().length, 4, 'Bootstrap plus three filtered pages');
+  assert.deepEqual(result.sites, records.slice(0, 1));
+  assert.deepEqual([result.count, result.totalCount, result.complete, result.nextOffset], [1, 3, false, 1]);
+  assert.equal(result.selectedSite, null, 'A capped page cannot select the sole site from a larger collection');
+  assert.equal(requests().length, 2, 'Explicit limit caps rows after one filtered page');
+  const tail = await cli(['site', 'list', '--limit', '1', '--offset', '2', '--filter', "name.ne('excluded')"]);
+  assert.deepEqual(tail.sites, records.slice(2));
+  assert.equal(tail.complete, true);
+  assert.equal(tail.selectedSite, null, 'The last page does not make its only row the sole available site');
   seed(request => request.url.endsWith('/info') ? info : { offset: 0, limit: 0, count: 0, totalCount: 3, data: [] });
   assert.equal((await cli(['site', 'list', '--limit', '0'])).complete, false);
   assert.equal(requests().length, 2, 'Limit zero sends one metadata request after bootstrap');
@@ -50,13 +56,27 @@ export async function verifyReads({ cli, configure, trusted, seed, requests, ins
   assert.equal((await cli(['info'], 1)).error.code, 'UPSTREAM_ERROR');
   assert.equal(requests().length, 1, 'Redirect destination receives no authenticated request');
 
+  for (const [status, code] of [[400, 'UPSTREAM_ERROR'], [404, 'NOT_FOUND'], [500, 'UPSTREAM_ERROR']]) {
+    seed((request, response) => {
+      if (request.url.endsWith('/info')) return info;
+      response.statusCode = status;
+      response.end(JSON.stringify(vendorErrors.wifiFastRoaming));
+    });
+    const failure = await cli(['client', 'show', '--site', records[0].id,
+      '--client-id', records[1].id], 1);
+    assert.equal(failure.error.code, code);
+    assert.deepEqual(failure.upstream, { status, ...vendorErrors.wifiFastRoaming });
+    assert.equal(failure.help.some(hint => /auth status|profile configure/.test(hint)), false);
+    if (status === 400) assert.equal(failure.help.some(hint => /site UUID/.test(hint)), true);
+  }
+
   for (const [body, code] of [['{malformed', 'RESPONSE_INVALID'], [' '.repeat(1024 * 1024 + 1), 'READ_INCOMPLETE']]) {
     seed((request, response) => { response.end(body); });
     assert.equal((await cli(['info'], 1)).error.code, code);
     assert.equal(requests().length, 1);
   }
   seed(request => request.url.endsWith('/info') ? info : { offset: 0, limit: 1, count: 1, totalCount: 3, data: [records[0]] });
-  assert.equal((await cli(['site', 'list', '--limit', '1'], 1)).error.code, 'READ_INCOMPLETE');
+  assert.equal((await cli(['site', 'list'], 1)).error.code, 'READ_INCOMPLETE');
 
   const { readJson } = await import(pathToFileURL(join(installed, 'dist/transport.js')));
   const intervals = [];

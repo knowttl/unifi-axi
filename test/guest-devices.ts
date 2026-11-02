@@ -9,7 +9,7 @@ const site = '9361553d-e20d-45b8-a516-6948ab010011';
 const id = '8c850c83-1111-4111-8111-000000000001';
 const neighbourId = '8c850c83-1111-4111-8111-000000000002';
 const macAddress = '02:00:00:00:00:01';
-const device = { id, macAddress, name: 'Synthetic switch', configurationId: 'synthetic-configuration',
+export const device = { id, macAddress, name: 'Synthetic switch', configurationId: 'synthetic-configuration',
   ipAddress: '192.0.2.10', model: 'SYNTHETIC', state: 'ONLINE', supported: true, firmwareUpdatable: false,
   features: {}, interfaces: {} };
 const client = { id, name: 'Synthetic guest', type: 'WIRED', macAddress, uplinkDeviceId: neighbourId,

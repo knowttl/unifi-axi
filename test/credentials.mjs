@@ -20,6 +20,9 @@ export async function verifyCredentials({ executable, installed, temporary, env,
   const config = join(home, 'config with spaces.json');
   const secretFile = join(home, 'key.txt');
   const syntheticKey = 'synthetic-"key+/=%';
+  const coverage = writeTask === 'all'
+    ? new (await import('./variant-coverage.ts')).VariantCoverage(syntheticKey, installed) : undefined;
+  const exchanges = [];
   const redactedForms = [syntheticKey, JSON.stringify(syntheticKey).slice(1, -1), encodeURIComponent(syntheticKey)];
   const source = { origin: 'https://localhost:9', apiKey: { env: 'SYNTHETIC_KEY' } };
   function protectWindows(path) {
@@ -56,6 +59,7 @@ Set-Acl -LiteralPath $p -AclObject $acl
   configure();
 
   async function cli(args, code = 0, overrides = {}, guarded = true) {
+    const firstExchange = exchanges.length;
     const child = spawn(process.execPath, [...(guarded ? ['--import', guard] : []), executable, ...args], {
       cwd: home, env: { ...env, UNIFI_AXI_CONFIG: config,
         ...(!guarded ? { NODE_OPTIONS: `--import=${new URL('./fixtures/write-guard.ts', import.meta.url).pathname}`, UNIFI_AXI_TEST_PORT: String(fakePort) } : {}),
@@ -66,13 +70,16 @@ Set-Acl -LiteralPath $p -AclObject $acl
     child.stdout.on('data', value => { stdout += value; });
     child.stderr.on('data', value => { stderr += value; });
     const [status, signal] = await once(child, 'close');
-    assert.equal(signal, null, stdout + stderr);
+    assert.equal(signal, null, `${args.join(' ')}\n${stdout}${stderr}`);
     if (code === -1) assert.ok([0, 1].includes(status), `${args.join(' ')}\n${stdout}${stderr}`);
     else assert.equal(status, code, `${args.join(' ')}\n${stdout}${stderr}`);
     assert.equal(stderr, '');
     for (const key of redactedForms) assert.equal((stdout + stderr).includes(key), false, 'No raw, escaped or encoded key in retained output');
     assert.equal(existsSync(env.UNIFI_AXI_TEST_NETWORK_LOG), false, 'Offline command attempted network');
-    return code === 99 ? { interrupted: true } : decode(stdout);
+    if (code === 99) return { interrupted: true };
+    const result = decode(stdout);
+    coverage?.observe(args, result, exchanges.slice(firstExchange));
+    return result;
   }
   const status = (args = [], overrides = {}, code = 0) => cli(['auth', 'status', ...args], code, overrides);
   const error = async (expected, profiles, args = [], overrides = {}) => {
@@ -180,6 +187,19 @@ Set-Acl -LiteralPath $p -AclObject $acl
   let requests = [];
   let respond = () => ({ applicationVersion: '11.0.97', echo: syntheticKey, encoded: encodeURIComponent(syntheticKey), escaped: JSON.stringify(syntheticKey).slice(1, -1), passphrase: 'synthetic-wifi' });
   const server = createServer({ key: readFileSync(join(home, 'valid.key')), cert: cert('valid') }, (request, response) => {
+    if (coverage) {
+      const exchange = { method: request.method, path: request.url, request: '', response: '', status: 0 };
+      exchanges.push(exchange);
+      request.on('data', chunk => { exchange.request += chunk; });
+      const write = response.write.bind(response);
+      response.write = (chunk, ...args) => { exchange.response += chunk; return write(chunk, ...args); };
+      const end = response.end.bind(response);
+      response.end = (chunk, ...args) => {
+        if (chunk !== undefined && typeof chunk !== 'function') exchange.response += chunk;
+        exchange.status = response.statusCode;
+        return end(chunk, ...args);
+      };
+    }
     requests.push({ method: request.method, path: request.url, host: request.headers.host, key: request.headers['x-api-key'] });
     response.setHeader('Content-Type', 'application/json');
     const body = respond(request, response);
@@ -258,6 +278,10 @@ Set-Acl -LiteralPath $p -AclObject $acl
           configure, trusted, home, config, port, syntheticKey, task: writeTask,
           seed: handler => { requests = []; respond = handler; }, requests: () => requests,
         };
+        if (writeTask === 'all') {
+          const { verifyBodyless } = await import('./bodyless.ts');
+          inventoryRows.push(...await verifyBodyless(harness));
+        }
         if (writeTask === 'all' || writeTask.startsWith('B3.') || ['B4.0', 'B4.1'].includes(writeTask)) inventoryRows.push(...await verifyWrites({ ...harness, task: writeTask === 'all' || writeTask.startsWith('B4.') ? 'B3.3' : writeTask }));
         if (writeTask === 'all' || ['B4.0', 'B4.1'].includes(writeTask)) {
           const { verifyB4 } = await import('./b4.ts');
@@ -275,6 +299,10 @@ Set-Acl -LiteralPath $p -AclObject $acl
           const { verifyWifiVouchers } = await import('./wifi-vouchers.ts');
           inventoryRows.push(...await verifyWifiVouchers(harness));
         }
+        if (writeTask === 'all') {
+          const { verifyProtocolVariants } = await import('./protocol-variants.ts');
+          await verifyProtocolVariants(harness);
+        }
       }
     }
   } finally {
@@ -291,5 +319,5 @@ Set-Acl -LiteralPath $p -AclObject $acl
   if (journey) rows.push({ task: 'B1.2a', acceptance: 'STEP-B1.2a', operation: ['OP-001', 'OP-002'],
     version: ['10.6.109', '11.0.97'], variant: null, direction: 'standalone-synthetic',
     status: 'passed-on-current-platform', nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING' });
-  return [...rows, ...inventoryRows];
+  return [...rows, ...inventoryRows, ...(coverage?.rows() ?? [])];
 }

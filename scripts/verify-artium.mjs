@@ -161,7 +161,8 @@ try {
   }), runner, credentialStore: store,
     resolver: { async resolve(user, tool) {
       const ref = await resolver.resolve(user, tool);
-      return identity === 'wrong-tool' ? { ...ref, tool: 'gitea-axi' } : identity === 'wrong-profile' ? { ...ref, id: 'nonexistent' } : ref;
+      return identity === 'wrong-tool' ? { ...ref, tool: 'gitea-axi' } : identity === 'wrong-profile' ? { ...ref, id: 'nonexistent' } :
+        identity === 'wrong-revision' ? { ...ref, revision: ref.revision - 1 } : ref;
     } }, environment: {}, adapters: [adapter] });
   const url = await app.listen({ host: '127.0.0.1', port: 0 });
   mkdirSync(join(cliEnvironment.XDG_CONFIG_HOME, 'unifi-axi'), { recursive: true, mode: 0o700 });
@@ -310,11 +311,13 @@ if (process.argv[1]?.endsWith('/dist/bin.js') || process.argv[1]?.endsWith('unif
   db.prepare("DELETE FROM role_tools WHERE tool = 'unifi-axi'").run();
   await denied(['info'], 'TOOL_NOT_GRANTED');
   db.prepare("INSERT INTO role_tools VALUES ('synthetic-role', 'unifi-axi')").run();
-  for (const [wrongIdentity, code] of [['wrong-tool', 'CREDENTIAL_INVALID'], ['wrong-profile', 'REVISION_CONFLICT']]) {
+  for (const [wrongIdentity, code] of [['wrong-tool', 'CREDENTIAL_INVALID'], ['wrong-profile', 'REVISION_CONFLICT'], ['wrong-revision', 'REVISION_CONFLICT']]) {
     identity = wrongIdentity;
     await denied(['info'], code);
   }
   identity = 'normal';
+  record('WRITE-001', { task: 'B4.11', hostCredentialRevision: 'stale revision refused before vendor access',
+    hostedWrites: 'denied; no durable hosted write custody' });
   const executable = toolPaths['unifi-axi'];
   toolPaths['unifi-axi'] = executable + '.unknown';
   await denied(['info'], 'CREDENTIAL_INVALID');

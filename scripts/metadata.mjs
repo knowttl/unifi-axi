@@ -4,7 +4,7 @@ import { catalogue, description, guidance, examplesFor } from '../dist/catalogue
 await copyFile(new URL('../src/axi-credential.schema.json', import.meta.url), new URL('../dist/axi-credential.schema.json', import.meta.url));
 
 await writeFile(new URL('../dist/capabilities.json', import.meta.url), `${JSON.stringify({
-  stage: 'B4.8', operations: catalogue,
+  stage: 'B4.11', operations: catalogue,
   unsupported: ['WAN changes', 'VPN changes', 'RADIUS changes', 'UniFi OS backup/restore', 'Firmware upgrades', 'Administrator accounts', 'SSH', 'Undocumented endpoints'],
 }, null, 2)}\n`);
 await writeFile(new URL('../dist/SKILL.md', import.meta.url), [

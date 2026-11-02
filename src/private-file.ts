@@ -53,6 +53,8 @@ if ($env:UNIFI_AXI_ACL_ACTION -eq 'restrict') {
 };
 
 export class PrivateFiles {
+  private readonly durableDirectories = new Set<string>();
+
   constructor(private readonly platform = process.platform, private readonly acl: Acl = windowsAcl) {}
 
   private insecure(path: string): ToolError {
@@ -63,10 +65,14 @@ export class PrivateFiles {
     await mkdir(path, { recursive: !exclusive, mode: 0o700 });
     await this.verifyDirectory(path);
     if (this.platform === 'win32') this.acl(path, 'restrict', true);
+    const synced = [];
     for (let current = path; ; current = dirname(current)) {
       await this.syncDirectory(current);
-      if (current === dirname(current)) break;
+      synced.push(current);
+      // Flush the changed parent, then stop once its own link is already durable.
+      if (this.durableDirectories.has(current) || current === dirname(current)) break;
     }
+    for (const directory of synced) this.durableDirectories.add(directory);
   }
 
   async verifyDirectory(path: string): Promise<void> {

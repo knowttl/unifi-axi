@@ -11,7 +11,7 @@ import { verifyIntegrations } from '../test/integrations.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter(arg => arg !== '--');
-assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9', 'B2.10', 'B3.1', 'B3.2', 'B3.3', 'B4.0', 'B4.1', 'B4.2', 'B4.3', 'B4.4', 'B4.5', 'B4.6', 'B4.7', 'B4.8', 'B4.9', 'B4.10'].includes(args[1])),
+assert.ok(args.length === 0 || (args.length === 2 && args[0] === '--task' && ['B1.1', 'B1.2', 'B1.2a', 'B2.0', 'B2.2', 'B2.3', 'B2.4', 'B2.5', 'B2.6', 'B2.7', 'B2.8', 'B2.9', 'B2.10', 'B3.1', 'B3.2', 'B3.3', 'B4.0', 'B4.1', 'B4.2', 'B4.3', 'B4.4', 'B4.5', 'B4.6', 'B4.7', 'B4.8', 'B4.9', 'B4.10', 'B4.11'].includes(args[1])),
   'Select an implemented task. Unknown, future, duplicate or incomplete selectors fail.');
 const temporary = mkdtempSync(join(tmpdir(), 'unifi-axi-packaged-'));
 const prefix = join(temporary, 'install');
@@ -160,6 +160,7 @@ try {
   const metadata = JSON.parse(command(process.execPath, ['--input-type=module', '-e',
     "import {catalogue} from '@knowttl/unifi-axi/catalogue';import capabilities from '@knowttl/unifi-axi/capabilities' with {type:'json'};import {readFileSync} from 'node:fs';const skill=readFileSync(new URL(import.meta.resolve('@knowttl/unifi-axi/skill')),'utf8');console.log(JSON.stringify({catalogue,capabilities,skill}));"], { cwd: prefix, env }).stdout);
   verifyIntegrations({ cli, temporary, user, guard });
+  assert.equal(metadata.capabilities.stage, 'B4.11', 'Packaged capabilities identify the current implementation stage');
   assert.deepEqual(metadata.catalogue.map(({ id, command, vendorOperationId, method, path, effect }) =>
     ({ id, command, vendorOperationId, method, path, effect })), expected);
   assert.deepEqual(metadata.capabilities.operations, metadata.catalogue, 'Generated metadata must match the public catalogue');
@@ -200,14 +201,21 @@ try {
   }
   assert.equal(new Set(rows.map(row => row.operation)).size, 73, 'No duplicate or missing results');
   if (args[1] !== 'B1.1') rows.push(...await verifyCredentials({ executable, installed, temporary, env, guard,
-    journey: args[1] !== 'B1.2', writeTask: args[1] === undefined ? 'all' : /B[34]\./.test(args[1]) ? args[1] : undefined }));
+    journey: args[1] !== 'B1.2', writeTask: args[1] === undefined || args[1] === 'B4.11' ? 'all' : /B[34]\./.test(args[1]) ? args[1] : undefined }));
   if (args[1] === undefined || args[1] === 'B2.10') rows.push({ task: 'B2.10', acceptance: 'STEP-B2.10',
     operation: ['OP-001', 'OP-002'], direction: 'standalone-synthetic', status: 'passed-on-current-platform',
     integrations: ['claude', 'codex', 'opencode'], nativeWindows: 'PENDING', liveCommissioning: 'PENDING' });
   if (args[1] === undefined || ['B1.2a', 'B2.0'].includes(args[1])) rows.push({ task: 'B2.0', acceptance: 'STEP-B2.0',
     operation: ['OP-001', 'OP-002'], version: ['10.6.109', '11.0.97'], direction: 'standalone-synthetic', status: 'passed-on-current-platform' });
-  console.log(JSON.stringify({ task: args[1] ?? 'B4.1', result: 'passed-on-current-platform', platform: process.platform,
-    nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING', node: process.version,
+  const blockers = rows.filter(row => row.status === 'blocked-by-CF-007' || row.status === 'known-contract-conflict');
+  const pending = rows.filter(row => ['pending-native-windows', 'pending-obligation'].includes(row.status));
+  const result = blockers.length ? 'blocked' : pending.length ? 'pending' : 'passed-on-current-platform';
+  console.log(JSON.stringify({ task: args[1] ?? 'B4.11', result, platform: process.platform,
+    b4Closure: { status: blockers.length ? 'blocked-by-CF-007' : pending.length ? 'pending' : 'not-evaluated',
+      reason: 'CF-007 (issue #33) blocks device paths on 11.0.97; native Windows and live commissioning remain pending.', blockers },
+    variantPositions: { observed: rows.filter(row => row.case && row.status === 'passed').length,
+      pending: rows.filter(row => row.status === 'pending-obligation').length },
+    nativeWindows: 'PENDING', node: process.version,
     packageIntegritySha256: integrity, executable, sourceHashes,
     inputHashes: { catalogue: sha(readFileSync(join(root, 'test/fixtures/catalogue.json'))),
       lockfile: sha(readFileSync(join(root, 'pnpm-lock.yaml'))),
@@ -220,6 +228,10 @@ try {
       dnsTraffic: sha(readFileSync(join(root, 'test/dns-traffic-fixtures.ts'))),
       wifiVouchers: sha(readFileSync(join(root, 'test/wifi-vouchers.ts'))),
       guestDevices: sha(readFileSync(join(root, 'test/guest-devices.ts'))),
+      bodyless: sha(readFileSync(join(root, 'test/bodyless.ts'))),
+      variantCoverage: sha(readFileSync(join(root, 'test/variant-coverage.ts'))),
+      protocolVariants: sha(readFileSync(join(root, 'test/protocol-variants.ts'))),
+      variantObligations: sha(readFileSync(join(root, 'test/fixtures/variant-obligations.json'))),
       writeGuard: sha(readFileSync(join(root, 'test/fixtures/write-guard.ts'))) },
     timings, rows, futureTasks: 'unimplemented', liveMutationProbes: '32 unrun' }, null, 2));
 } finally {

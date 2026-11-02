@@ -42,9 +42,9 @@ export const networkBodies = [
 const variantCases = [
   ['VAR-034', 'VAR-214'], ['VAR-033', 'VAR-213'], ['VAR-032', 'VAR-212'],
   ['VAR-033', 'VAR-213', 'VAR-226'], ['VAR-033', 'VAR-213', 'VAR-227'],
-  ['VAR-032', 'VAR-212', 'VAR-185', 'VAR-210', 'VAR-995', 'VAR-255', 'VAR-256', 'VAR-190', 'VAR-191', 'VAR-966', 'VAR-967'],
+  ['VAR-032', 'VAR-212', 'VAR-185', 'VAR-210', 'VAR-996', 'VAR-255', 'VAR-256', 'VAR-190', 'VAR-191', 'VAR-966', 'VAR-967'],
   ['VAR-032', 'VAR-212', 'VAR-186', 'VAR-211', 'VAR-997', 'VAR-255', 'VAR-256', 'VAR-190', 'VAR-191', 'VAR-966', 'VAR-967'],
-  ['VAR-032', 'VAR-212', 'VAR-211', 'VAR-996'],
+  ['VAR-032', 'VAR-212', 'VAR-211', 'VAR-995'],
 ];
 const voucher = { id, name: 'Synthetic voucher', code: 'VOUCHER-CANARY-48291', authorizedGuestCount: 0,
   createdAt: '2026-10-30T12:00:00Z', expired: false, timeLimitMinutes: 60 };

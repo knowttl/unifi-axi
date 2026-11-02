@@ -43,15 +43,21 @@ export async function verifyPolicyWrites(h: Harness) {
       let mode = 'normal';
       let retained: Row = {};
       let order: Row = {};
+      let orderingSelectors: Record<string, string> = {};
       const reset = () => {
         h.configure({ lab: profile }); state = [initial, neighbour]; mutations = 0; sent = undefined; mode = 'normal'; retained = {};
         order = family.task === 'B4.2' ? { orderedFirewallPolicyIds: { beforeSystemDefined: [id], afterSystemDefined: [neighbourId] } } : { orderedAclRuleIds: [id, neighbourId] };
+        orderingSelectors = family.task === 'B4.2' ? { sourceFirewallZoneId: id, destinationFirewallZoneId: neighbourId } : {};
         h.seed((request, response) => {
           assert.equal(request.headers['x-api-key'], h.syntheticKey);
           const url = new URL(request.url!, h.trusted.origin);
           if (url.pathname.endsWith('/info')) return { applicationVersion: version };
           if (url.pathname.includes(`/sites/${otherSite}/`)) { response.writeHead(403); response.end(); return; }
           assert.equal(url.pathname.startsWith(base), true, request.url);
+          if (url.pathname.endsWith('/ordering')) {
+            assert.equal(url.pathname, `${base}/ordering`);
+            assert.deepEqual(Object.fromEntries(url.searchParams), orderingSelectors);
+          }
           if (request.method === 'GET') {
             if (url.pathname.endsWith('/ordering')) return order;
             if (url.pathname === base) return { offset: 0, limit: 25, count: state.length, totalCount: state.length, data: state };
@@ -59,7 +65,7 @@ export async function verifyPolicyWrites(h: Harness) {
           }
           mutations++;
           sentMethod = request.method;
-          if (family.task === 'B4.5' || family.task === 'B4.6') {
+          if (!url.pathname.endsWith('/ordering')) {
             assert.equal(url.pathname, request.method === 'POST' ? base : `${base}/${id}`);
             assert.equal(url.search, '');
           }
@@ -248,8 +254,10 @@ export async function verifyPolicyWrites(h: Harness) {
         if (family.task === 'B4.2') {
           const changed = [...family.command.split(' '), 'order', 'set', '--body-file', bodyFile,
             '--source-firewall-zone-id', neighbourId, '--destination-firewall-zone-id', id];
+          orderingSelectors = { sourceFirewallZoneId: neighbourId, destinationFirewallZoneId: id };
           assert.equal((await run(execute(changed, preview), 1)).error.code, 'CONFIRMATION_MISMATCH');
           assert.equal(mutations, 0);
+          orderingSelectors = { sourceFirewallZoneId: id, destinationFirewallZoneId: neighbourId };
         }
         const requestId = `order-${++serial}`;
         assert.equal((await run(execute(args, preview, requestId))).write.outcome, 'verified');

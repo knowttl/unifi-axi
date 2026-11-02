@@ -85,14 +85,14 @@ export async function verifyPolicies({ cli, seed }) {
       ['switching switch-stack', 'switching/switch-stacks', 'switchStacks', 'switch-stack-id', switchStacks],
     ]) {
       const base = `/proxy/network/integration/v1/sites/${site}/${path}`;
-      const excluded = { ...records[0], id: '8c850c83-1111-4111-8111-000000000009', name: 'excluded' };
+      const excluded = { ...records[0], id: '8c850c83-1111-4111-8111-000000000009' };
+      const filter = `id.ne('${excluded.id}')`;
       const state = [...records, excluded];
       serve((url, response) => {
         if (url.pathname === base) {
-          const filter = url.searchParams.get('filter');
-          assert.equal(filter, "name.ne('excluded')");
+          assert.equal(url.searchParams.get('filter'), filter);
           assert.equal(url.searchParams.get('limit'), '1');
-          const selected = state.filter(row => row.name !== 'excluded');
+          const selected = state.filter(row => row.id !== excluded.id);
           const offset = Number(url.searchParams.get('offset'));
           const data = selected.slice(offset, offset + 1);
           return { offset, limit: 1, count: data.length, totalCount: selected.length, data };
@@ -101,7 +101,7 @@ export async function verifyPolicies({ cli, seed }) {
         if (selected) return selected;
         response.writeHead(404); response.end();
       });
-      const result = await run(`${command} list`, ['--limit', '1', '--filter', "name.ne('excluded')"]);
+      const result = await run(`${command} list`, ['--limit', '1', '--filter', filter]);
       assert.deepEqual(result[key], records.slice(0, 1));
       assert.deepEqual([result.count, result.totalCount], [1, records.length]);
       const detailKey = { aclRules: 'aclRule', dnsPolicies: 'dnsPolicy', trafficLists: 'trafficList',

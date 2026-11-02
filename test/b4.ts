@@ -168,6 +168,8 @@ export async function verifyB4(h: Harness) {
       let lostAck = false;
       let failAfterAck = false;
       let failVerification = false;
+      let retained: Record<string, unknown> = {};
+      let omitGuarding = false;
       h.seed((request, response) => {
         assert.equal(request.headers['x-api-key'], h.syntheticKey);
         const url = new URL(request.url!, h.trusted.origin);
@@ -191,7 +193,8 @@ export async function verifyB4(h: Harness) {
           sent.push({ method: request.method!, path: request.url!, body: parsed });
           if (request.method === 'DELETE') state = state.filter(row => row.id !== id);
           else {
-            const row = { ...(parsed as Record<string, unknown>), id, default: false, metadata: responseMetadata };
+            const row: Record<string, unknown> = { ...(parsed as Record<string, unknown>), ...retained, id, default: false, metadata: responseMetadata };
+            if (omitGuarding) delete row.dhcpGuarding;
             state = request.method === 'POST' ? [...state, row] : state.map(old => old.id === id ? row : old);
           }
           if (lostAck) { request.socket.destroy(); return; }
@@ -244,6 +247,82 @@ export async function verifyB4(h: Harness) {
         assert.equal(sent.length, before + 1, 'An accepted update reconciles without another mutation');
         assert.deepEqual(state, [neighbour, { ...requested, id, default: false, metadata: responseMetadata }]);
         rows.push({ task: 'B4.1', operation: 'OP-052', version, status: 'passed', direction: 'accepted-update-replay-reconciliation' });
+        for (const scenario of [
+          { label: 'omitted-guard-retained', verb: 'update', requested: base, omit: false,
+            readback: { dhcpGuarding: { trustedDhcpServerIpAddresses: ['192.0.2.53'] } }, outcome: 'accepted' },
+          { label: 'null-create-omitted-readback', verb: 'create', requested: { ...base, dhcpGuarding: null },
+            omit: true, readback: {}, outcome: 'verified' },
+          { label: 'null-update-omitted-readback', verb: 'update', requested: { ...base, dhcpGuarding: null },
+            omit: true, readback: {}, outcome: 'verified' },
+          { label: 'omitted-update-null-readback', verb: 'update', requested: base,
+            omit: false, readback: { dhcpGuarding: null }, outcome: 'verified' },
+        ] as const) {
+          state = scenario.verb === 'create' ? [neighbour] : [neighbour, { ...base, id, default: false, metadata: responseMetadata,
+            dhcpGuarding: { trustedDhcpServerIpAddresses: ['192.0.2.53'] } }];
+          retained = scenario.readback; omitGuarding = scenario.omit;
+          writeFileSync(bodyFile, JSON.stringify(scenario.requested));
+          const args = ['network', scenario.verb, '--body-file', bodyFile, ...(scenario.verb === 'update' ? ['--network-id', id] : [])];
+          const preview = (await run(args)).preview;
+          assert.deepEqual(preview.body, scenario.requested, 'Verification normalization preserves the previewed body');
+          const requestId = `${scenario.label}-${version}`;
+          const before = sent.length;
+          const result = await run([...args, '--execute', '--confirm', preview.confirmation, '--request-id', requestId]);
+          assert.equal(result.write.outcome, scenario.outcome, `${scenario.label}: NORM-001 and replacement verification (#23)`);
+          assert.deepEqual(sent.slice(before), [{ method: scenario.verb === 'create' ? 'POST' : 'PUT',
+            path: `/proxy/network/integration/v1/sites/${site}/networks${scenario.verb === 'update' ? `/${id}` : ''}`, body: scenario.requested }]);
+          const reconciled = await run(['write', 'reconcile', '--request-id', requestId]);
+          assert.deepEqual(reconciled.reconciliation, { outcome: scenario.outcome, readOnly: true });
+          if (scenario.outcome === 'accepted') {
+            state = [neighbour, { ...base, id, default: false, metadata: responseMetadata }];
+            assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).write.outcome, 'verified',
+              'Persisted omission expectation verifies only after guarding is disabled');
+          }
+          assert.equal(sent.length, before + 1, 'Explicit reconciliation sends no mutation');
+          assert.deepEqual(state[0], neighbour);
+          rows.push({ task: 'B4.1', operation: scenario.verb === 'create' ? 'OP-049' : 'OP-052', version,
+            status: 'passed', direction: scenario.label });
+        }
+        retained = {}; omitGuarding = false;
+      }
+      if (index === 2) {
+        for (const verb of ['create', 'update'] as const) {
+          for (const scenario of [
+            { label: 'omitted-mdns-true', supplied: undefined, readback: true, outcome: 'verified', deferred: false },
+            { label: 'omitted-mdns-false', supplied: undefined, readback: false, outcome: 'accepted', deferred: true },
+            { label: 'false-mdns-mismatch', supplied: false, readback: true, outcome: 'accepted', deferred: false },
+            { label: 'true-mdns-mismatch', supplied: true, readback: false, outcome: 'accepted', deferred: false },
+          ] as const) {
+            state = verb === 'create' ? [neighbour] : [neighbour, { ...body, id, default: false, metadata: responseMetadata }];
+            const requested: Record<string, unknown> = { ...body };
+            if (scenario.supplied === undefined) delete requested.mdnsForwardingEnabled;
+            else requested.mdnsForwardingEnabled = scenario.supplied;
+            retained = { mdnsForwardingEnabled: scenario.readback };
+            writeFileSync(bodyFile, JSON.stringify(requested));
+            const args = ['network', verb, '--body-file', bodyFile, ...(verb === 'update' ? ['--network-id', id] : [])];
+            const preview = (await run(args)).preview;
+            assert.deepEqual(preview.body, requested);
+            const requestId = `${verb}-${scenario.label}-${version}`;
+            const execute = [...args, '--execute', '--confirm', preview.confirmation, '--request-id', requestId];
+            const before = sent.length;
+            failAfterAck = scenario.deferred;
+            assert.equal((await run(execute)).write.outcome, scenario.outcome, `${verb}: ${scenario.label}`);
+            failAfterAck = false;
+            assert.deepEqual(sent.slice(before), [{ method: verb === 'create' ? 'POST' : 'PUT',
+              path: `/proxy/network/integration/v1/sites/${site}/networks${verb === 'update' ? `/${id}` : ''}`, body: requested }]);
+            const outcome = scenario.supplied === undefined ? 'verified' : 'accepted';
+            assert.deepEqual((await run(['write', 'reconcile', '--request-id', requestId])).reconciliation, { outcome, readOnly: true });
+            assert.equal((await run(execute)).write.outcome, outcome);
+            if (scenario.supplied !== undefined) {
+              state[1]!.mdnsForwardingEnabled = scenario.supplied;
+              assert.equal((await run(['write', 'reconcile', '--request-id', requestId])).write.outcome, 'verified');
+            }
+            assert.equal(sent.length, before + 1, 'mDNS reconciliation and replay send no mutation');
+            assert.deepEqual(state[0], neighbour);
+            rows.push({ task: 'B4.1', operation: verb === 'create' ? 'OP-049' : 'OP-052', version,
+              status: 'passed', direction: `${verb}-${scenario.label}` });
+          }
+        }
+        retained = {};
       }
       const remove = ['network', 'delete', '--network-id', id];
       const defaultConfirmation = (await run(remove)).preview.confirmation;

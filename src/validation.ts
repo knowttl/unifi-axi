@@ -109,9 +109,16 @@ export function compileContract(source: unknown, version: string) {
         if (schema.minLength !== undefined && length < schema.minLength) fail('too short');
         if (schema.maxLength !== undefined && length > schema.maxLength) fail('too long');
         if (schema.format === 'uuid' && !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(value)) fail('invalid uuid');
-        if (['date', 'date-time'].includes(schema.format ?? '') &&
-          (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value) ||
-            (schema.format === 'date' ? value.length !== 10 : value.length <= 10) || !Number.isFinite(Date.parse(value)))) fail('invalid date');
+        if (['date', 'date-time'].includes(schema.format ?? '')) {
+          const year = Number(value.slice(0, 4));
+          const month = Number(value.slice(5, 7));
+          const day = Number(value.slice(8, 10));
+          const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+          const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+          if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value) ||
+              (schema.format === 'date' ? value.length !== 10 : value.length <= 10) || !Number.isFinite(Date.parse(value)) ||
+              day < 1 || day > (daysInMonth[month - 1] ?? 0)) fail('invalid date');
+        }
       }
       if (Array.isArray(value)) {
         if (schema.minItems !== undefined && value.length < schema.minItems) fail('too few items');

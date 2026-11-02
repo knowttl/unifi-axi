@@ -41,14 +41,14 @@ export async function sites(profile: Profile, secret: string, values: Record<str
   const peer = typeof boundedOrPeer === 'object' ? boundedOrPeer : undefined;
   const offset = Number(values.offset ?? 0);
   const limit = Number(values.limit ?? 25);
-  const read = async (next: number, budget?: Parameters<typeof readJson>[3]) => {
-    const query = new URLSearchParams({ offset: String(next), limit: String(bounded ? Math.min(limit, 25 - next) : limit) });
+  const read = async (next: number, budget: Parameters<typeof readJson>[3], pageLimit: number) => {
+    const query = new URLSearchParams({ offset: String(next), limit: String(pageLimit) });
     if (values.filter !== undefined) query.set('filter', values.filter);
     const value = await readJson(profile, secret, `/v1/sites?${query}`, budget, peer);
     validateResponse(version, 'OP-002', value);
     return sitePage(value as SitePage);
   };
-  const result = await enumerate(read, site => site.id, offset, limit, undefined, bounded ? 25 : undefined);
+  const result = await enumerate(read, site => site.id, offset, limit, undefined, bounded ? 25 : values.limit === undefined ? undefined : limit);
   const { data, ...metadata } = result;
   return { sites: data, ...metadata,
     ...(bounded ? { truncation: { truncated: !metadata.complete, originalCount: metadata.totalCount,

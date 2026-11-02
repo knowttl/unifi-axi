@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { PrivateFiles } from './private-file.js';
 import { ToolError } from './security.js';
 import { writeOperations } from './catalogue.js';
+import type { VendorFailure } from './transport.js';
 
 export function digest(value: unknown): string {
   function canonical(item: unknown): unknown {
@@ -24,7 +25,8 @@ export interface Intent {
   operation: string;
   site: string;
   target: string | null;
-  outcome: 'not-sent' | 'unknown' | 'accepted' | 'verified' | 'no-op';
+  outcome: 'not-sent' | 'unknown' | 'accepted' | 'verified' | 'no-op' | 'rejected';
+  rejection?: VendorFailure;
   bodyHash: string;
   bodyKeys: string[];
   selectors?: Record<string, string>;
@@ -69,14 +71,17 @@ export class WriteJournal {
         ![value.binding, value.identity, value.confirmation, value.bodyHash].every(item => typeof item === 'string' && hash.test(item)) ||
         !writeOperations.has(value.operation) || typeof value.site !== 'string' || !uuid.test(value.site) ||
         (value.target !== null && (typeof value.target !== 'string' || !uuid.test(value.target))) ||
-        !['not-sent', 'unknown', 'accepted', 'verified', 'no-op'].includes(value.outcome) ||
+        !['not-sent', 'unknown', 'accepted', 'verified', 'no-op', 'rejected'].includes(value.outcome) ||
+        (value.outcome === 'rejected' && (!value.rejection || !Number.isInteger(value.rejection.status) || value.rejection.status < 400 || value.rejection.status >= 500)) ||
+        (value.rejection !== undefined && (value.outcome !== 'rejected' ||
+          Object.entries(value.rejection).some(([key, item]) => key !== 'status' && (!['code', 'message', 'requestId'].includes(key) || typeof item !== 'string')))) ||
         !Array.isArray(value.bodyKeys) || value.bodyKeys.some(key => typeof key !== 'string') ||
         (value.selectors !== undefined && (!value.selectors || typeof value.selectors !== 'object' || Array.isArray(value.selectors) ||
           Object.entries(value.selectors).some(([key, item]) => !['source-firewall-zone-id', 'destination-firewall-zone-id'].includes(key) || typeof item !== 'string' || !uuid.test(item)))) ||
         (value.targets !== undefined && (!Array.isArray(value.targets) || value.targets.some(id => typeof id !== 'string' || !uuid.test(id)) || new Set(value.targets.map(id => id.toLowerCase())).size !== value.targets.length)) ||
         (value.operation === 'OP-043' && value.targets === undefined) ||
         (value.operation === 'OP-045' && ['accepted', 'verified'].includes(value.outcome) && !value.targets?.length) ||
-        Object.keys(value).filter(key => !['selectors', 'targets'].includes(key)).sort().join() !== 'auditId,binding,bodyHash,bodyKeys,confirmation,identity,operation,outcome,site,target,version') return corrupt();
+        Object.keys(value).filter(key => !['selectors', 'targets', 'rejection'].includes(key)).sort().join() !== 'auditId,binding,bodyHash,bodyKeys,confirmation,identity,operation,outcome,site,target,version') return corrupt();
     value.site = value.site.toLowerCase();
     value.target = value.target?.toLowerCase() ?? null;
     return value;

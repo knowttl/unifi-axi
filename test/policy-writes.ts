@@ -215,7 +215,7 @@ export async function verifyPolicyWrites(h: Harness) {
       reset();
       mode = 'referenced';
       const referenced = (await run(remove)).preview.confirmation;
-      assert.equal((await run(execute(remove, referenced), 1)).error.code, 'OUTCOME_UNKNOWN');
+      assert.equal((await run(execute(remove, referenced), 1)).error.code, 'WRITE_REJECTED');
       assert.deepEqual(state, [initial, neighbour]);
       reset();
       h.configure({ lab: { ...profile, writes: { allowWrites: true, operations: [] } } });

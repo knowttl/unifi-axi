@@ -2,7 +2,7 @@ import { connect, checkServerIdentity } from 'node:tls';
 import { Agent, request } from 'node:https';
 import { isIP } from 'node:net';
 import type { Profile } from './profiles.js';
-import { ToolError } from './security.js';
+import { Redactor, ToolError } from './security.js';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export interface ReadBudget { deadline: number; bytes: number }
@@ -22,6 +22,39 @@ const waiting: (() => void)[] = [];
 
 class Retryable extends ToolError {
   constructor(readonly wait: number) { super('UPSTREAM_ERROR', 'API temporarily unavailable.'); }
+}
+
+export interface VendorFailure { status: number; code?: string; message?: string; requestId?: string }
+export class UpstreamError extends ToolError {
+  constructor(readonly upstream: VendorFailure) {
+    super(upstream.status === 404 ? 'NOT_FOUND' : 'UPSTREAM_ERROR',
+      `API request failed (HTTP ${upstream.status}).${upstream.message ? ` ${upstream.message}` : ''}`);
+  }
+}
+
+function vendorFailure(status: number, text: string, apiKey: string, mutation?: Mutation): UpstreamError {
+  const redactor = new Redactor();
+  redactor.register(apiKey);
+  if (mutation?.body) {
+    const register = (value: unknown): void => {
+      if (!value || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value)) {
+        if (/passphrase|password|token|secret|api[-_]?key/i.test(key) && typeof child === 'string') redactor.register(child);
+        else register(child);
+      }
+    };
+    register(JSON.parse(mutation.body));
+  }
+  let body: unknown;
+  try { body = JSON.parse(text); } catch { body = null; }
+  const upstream: VendorFailure = { status };
+  if (body && typeof body === 'object') {
+    for (const key of ['code', 'message', 'requestId'] as const) {
+      const value = (body as Record<string, unknown>)[key];
+      if (typeof value === 'string') upstream[key] = String(redactor.payload(value)).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 1000);
+    }
+  }
+  return new UpstreamError(upstream);
 }
 
 export async function readJson(profile: Profile, apiKey: string, path: string, budget = readBudget(), peer?: PeerIdentity): Promise<unknown> {
@@ -104,37 +137,42 @@ async function requestJson(profile: Profile, apiKey: string, path: string, expir
   try {
     if (mutation) await mutation.beforeSend();
     return await new Promise<unknown>((resolve, reject) => {
+      let failedStatus: number | undefined;
+      const failedRead = (error: unknown) => reject(failedStatus === undefined ? error : vendorFailure(failedStatus, '', apiKey, mutation));
       const call = request(new URL(`/proxy/network/integration${path}`, origin), {
         method: mutation?.method ?? 'GET', agent,
         headers: { 'X-API-KEY': apiKey, Accept: 'application/json',
           ...(mutation?.body !== undefined ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(mutation.body) } : {}) },
       }, response => {
         const status = response.statusCode ?? 0;
-        if (status !== (mutation?.status ?? 200)) {
+        const failed = status !== (mutation?.status ?? 200);
+        if (failed) {
+          failedStatus = status;
           const after = response.headers['retry-after'];
           // Retry only bounded delta-seconds. Never follow redirects with credentials.
           const safeDelay = typeof after === 'string' && /^(0|1|2)$/.test(after) ? Number(after) * 1000 : undefined;
-          response.destroy();
           if (retry && ((status === 429 && safeDelay !== undefined) || [502, 503, 504].includes(status))) {
+            response.destroy();
             reject(new Retryable(status === 429 ? safeDelay! : 100));
-          } else reject(new ToolError('UPSTREAM_ERROR', `API request failed (HTTP ${status}).`));
-          return;
+            return;
+          }
         }
         const chunks: Buffer[] = [];
         let size = 0;
         response.on('data', (chunk: Buffer) => {
           size += chunk.length;
           budget.bytes -= chunk.length;
-          if (size > 1024 * 1024 || budget.bytes < 0) { response.destroy(); reject(new ToolError('READ_INCOMPLETE', 'API response exceeded its byte budget. Narrow the filter.')); }
+          if (size > 1024 * 1024 || budget.bytes < 0) { response.destroy(); failedRead(new ToolError('READ_INCOMPLETE', 'API response exceeded its byte budget. Narrow the filter.')); }
           else chunks.push(chunk);
         });
-        response.once('error', reject);
+        response.once('error', failedRead);
         response.once('end', () => {
+          if (failed) { reject(vendorFailure(status, Buffer.concat(chunks).toString('utf8'), apiKey, mutation)); return; }
           if (mutation?.bodyless || (mutation && mutation.body === undefined && size === 0)) { resolve(null); return; }
           try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new ToolError('RESPONSE_INVALID', 'API response is not JSON.')); }
         });
       });
-      call.once('error', reject);
+      call.once('error', failedRead);
       call.end(mutation?.body);
     });
   } catch (error) {

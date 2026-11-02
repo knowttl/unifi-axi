@@ -85,7 +85,10 @@ At the current head every catalogue entry reports `implemented`.
 Reading notes:
 
 - Lists use bounded paging and report `count`, `totalCount`, `offset` and `complete`, and accept `--offset`, `--limit` and `--filter` where the operation documents them.
-  The default limit is 25 per request, `--limit 0` reads metadata only, and voucher lists default to 100.
+  An explicit `--limit N` caps the returned rows; `complete: false` and `nextOffset` identify where to resume with `--offset`.
+  Without `--limit`, enumeration uses pages of 25 (100 for vouchers) until complete within the read budget.
+  `--limit 0` reads metadata only.
+  Voucher and Wi-Fi lists retain this pagination metadata on stdout when using `--secret-output`, alongside exported IDs and the delivery receipt.
 - Enumeration is bounded to 100 pages, 10,000 rows, eight MiB across responses and thirty seconds, then fails with `READ_INCOMPLETE` and guidance.
 - Details verify the returned ID against the requested resource and never substitute a similar resource.
 - Select a site with `--site <site-id>`, then the profile `siteId`, then the sole discovered site.
@@ -128,10 +131,13 @@ Pass `--secret-output <absolute-path>` to `hotspot voucher` and `wifi broadcast`
 - Unknown outcomes are never retried.
   An exclusive claim and a synced intent precede dispatch, and a synced `unknown` record precedes any possible send.
   Reusing an owned request ID runs read-only reconciliation instead of resending.
-  `write reconcile` records a separate observation; receipts distinguish `not-sent`, `unknown`, `accepted`, `verified` and `no-op`, with an audit ID.
+  `write reconcile` records a separate observation; receipts distinguish `not-sent`, `unknown`, `rejected`, `accepted`, `verified` and `no-op`, with an audit ID.
   A lost acknowledgement stays `unknown`, and a similar resource never proves creation.
+- HTTP 4xx mutation responses produce terminal `rejected` receipts with sanitized vendor diagnostics.
+  Their request IDs remain final; preview a corrected request and use a new request ID.
+  Transport loss, timeouts, and server failures after possible dispatch remain `unknown` and must not be resent.
 - The write journal lives under `$XDG_STATE_HOME/unifi-axi/writes.log/` (or `.local/state/unifi-axi/writes.log/` under the home directory) with owner-only access, or under the absolute directory in `UNIFI_AXI_WRITE_LOG`.
-  It stores hashes, audit IDs, resource IDs and outcomes, never request bodies or keys.
+  It stores hashes, audit IDs, resource IDs, outcomes and sanitized refusal diagnostics; request bodies and credentials are not stored as journal fields.
   Keep the same profile, configuration and journal location across invocations.
 - Secrets are redacted: voucher `code` and Wi-Fi `passphrase` appear as `[REDACTED]`, and keys are redacted in raw, JSON-escaped and URL-encoded forms.
   Export of voucher codes and personal Wi-Fi passphrases requires both `--secret-output <absolute-path>` and `"allowSecretExport": true` in the selected file profile.
@@ -140,6 +146,7 @@ Pass `--secret-output <absolute-path>` to `hotspot voucher` and `wifi broadcast`
   Never issue a new generation request to recover an existing code; use `write reconcile` and re-export with `show --secret-output`.
 - `hotspot voucher delete-many` requires `--filter`, previews the matching IDs and deletes exactly the approved ID set.
 - Request bodies are validated against the selected contract and reject undeclared fields before any mutation.
+  For STANDARD WPA2_PERSONAL broadcasts, explicitly set `securityConfiguration.fastRoamingEnabled`; preview warns when it is missing.
 - Disruptive actions (restart, PoE power cycle, guest authorization) are accepted, not proven complete: receipts stay `accepted`.
 
 ## Configuration
@@ -172,13 +179,36 @@ Profile selection: `--profile`, `UNIFI_AXI_PROFILE`, a complete environment prof
 - TLS uses system trust and hostname verification.
   An appliance profile may set `tls.trustedCertificatePem` and `tls.peerFingerprintSha256` together, plus an optional IP `tls.connectAddress` that changes only the TCP destination.
   Certificate failures return `TLS_REJECTED` without retrying or sending credentials.
+- Request body files must be owner-only: use `chmod 600 '<body-file>'` on POSIX or a protected owner ACL on Windows.
+  Write command help includes the body fields, subtype requirements, and the packaged contract location for nested schemas.
 - The credential schema ships as `dist/axi-credential.schema.json` with `apiKey` marked `x-secret`.
 - Metadata exports: `./catalogue`, `./capabilities`, `./skill` and `./credential-schema`.
+
+### Self-signed controllers reached by IP
+
+When the certificate contains a DNS subject alternative name but no matching IP subject alternative name, a pinned IP origin still fails hostname verification.
+Set `origin` to `https://<certificate-dns-name>` (including the controller port when needed), and set `tls.connectAddress` to the controller IP.
+The TCP connection uses that IP while TLS SNI, certificate hostname verification, and the HTTP Host header use the origin DNS name.
+DNS resolution of that name is not needed with `connectAddress`.
+
+Obtain the certificate from the controller administrator through a trusted channel, or inspect the certificate presented on its TLS port:
+
+```sh
+openssl s_client -connect '<controller-ip>:<port>' -servername '<certificate-dns-name>' -showcerts </dev/null
+openssl x509 -in '<certificate.pem>' -noout -ext subjectAltName -fingerprint -sha256
+```
+
+Save the leaf certificate PEM block as `<certificate.pem>` and independently confirm its SHA-256 fingerprint with the administrator before trusting it.
+Set `tls.trustedCertificatePem` to the PEM text and `tls.peerFingerprintSha256` to the fingerprint's 64 hexadecimal digits with colons removed.
+Keep all certificate verification enabled, then check the profile with `unifi-axi doctor --profile <name>`.
 
 ## Output and exit codes
 
 - Output is TOON on stdout, except `-v`, `-V` and `--version`, which print the bare package version.
 - Errors use structured codes, for example `PROFILE_REQUIRED`, `PROFILE_NOT_FOUND`, `PROFILE_AMBIGUOUS`, `AUTH_REQUIRED`, `RESPONSE_INVALID`, `READ_INCOMPLETE`, `TIMEOUT`, `UPSTREAM_ERROR`, `CONTRACT_CONFLICT`, `INVALID_ARGUMENT` and `NOT_IMPLEMENTED`.
+- API failures include `upstream.status` and, when available, sanitized vendor `code`, `message` and `requestId` fields.
+  HTTP 404 reads return `NOT_FOUND`; other HTTP read failures return `UPSTREAM_ERROR`, with guidance for the failure.
+  Mutation refusals follow the receipt rules in [Safety](#safety).
 - Exit code 0 is success, 1 is a command error, and 2 is a usage error such as an unknown command, unknown flag, duplicate flag or invalid scalar value.
 - Each API request has a ten-second deadline, at most two reads run concurrently, and each response is bounded to one MiB.
 - Reads retry transport failures and HTTP 502, 503 and 504 at most twice within the deadline.

@@ -152,6 +152,17 @@ try {
     [['OP-999'], 'UNKNOWN_COMMAND'],
     [['--misspelled'], 'UNKNOWN_FLAG'],
   ]) assert.equal(decode(cli(args, 2)).error.code, code);
+  for (const suffix of [[], ['--profile', 'example']]) {
+    assert.equal(decode(cli(['frobnicate', ...suffix], 2)).error.code, 'UNKNOWN_COMMAND');
+  }
+  const clientHelp = decode(cli(['client', 'list', '--help']));
+  assert.equal(clientHelp.flags.find(flag => flag.name === '--site').required, false);
+  const wifiHelp = decode(cli(['wifi', 'broadcast', 'create', '--help']));
+  assert.match(wifiHelp.bodyFile, /owner-only/);
+  assert.match(wifiHelp.requestBody[0].schema, /Wifi broadcast create or update/);
+  assert.match(wifiHelp.requestBody[0].contract, /network-/);
+  assert.equal(wifiHelp.requestBody[0].shape.find(shape => shape.variant === 'STANDARD').fields
+    .find(field => field.name === 'securityConfiguration').required, true);
   assert.equal(decode(cli(['site', 'list', '--limit=0', '--offset', '0'], 1)).error.code, 'PROFILE_REQUIRED');
   assert.equal(decode(cli([], 1)).error.code, 'PROFILE_REQUIRED');
   assert.equal(decode(cli(['auth', 'status'], 1)).error.code, 'PROFILE_REQUIRED');

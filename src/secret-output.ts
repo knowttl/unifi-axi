@@ -31,9 +31,11 @@ export async function exportResponse(profile: Profile, secret: string, operation
   const destination = values['secret-output']!;
   if (!isAbsolute(destination)) throw new ToolError('INVALID_ARGUMENT', '--secret-output requires an absolute path in an existing private directory.');
   const ids: string[] = [];
+  let metadata: Record<string, unknown> = {};
   await new PrivateFiles().create(destination, async () => {
     const result = await readOperation(profile, secret, operation, values, version, undefined, true);
     const rows = Object.values(result).find(Array.isArray) as Record<string, unknown>[] | undefined;
+    if (rows) metadata = Object.fromEntries(Object.entries(result).filter(([, value]) => value !== rows));
     const records = rows ?? [Object.values(result)[0] as Record<string, unknown>];
     const secrets: { id: string; path: string; value: unknown }[] = [];
     for (let row of records) {
@@ -48,5 +50,5 @@ export async function exportResponse(profile: Profile, secret: string, operation
     }
     return JSON.stringify({ operation: operation.id, secrets }) + '\n';
   });
-  return { ids, receipt: { operation: operation.id, path: destination, delivered: true } };
+  return { ids, ...metadata, receipt: { operation: operation.id, path: destination, delivered: true } };
 }

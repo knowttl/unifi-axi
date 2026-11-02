@@ -95,7 +95,9 @@ export async function verifyB4(h: Harness) {
       assert.equal(existsSync(refusedFile), false);
       h.configure({ lab: exportProfile });
       const result = await run(args, 0, { UNIFI_AXI_READ_ONLY: 'true' });
-      assert.deepEqual(result, { ids: [id], receipt: { operation, path: destination, delivered: true } });
+      assert.deepEqual(result, { ids: [id], ...(['OP-044', 'OP-069'].includes(operation) ?
+        { offset: 0, count: 1, totalCount: 1, complete: true } : {}),
+      receipt: { operation, path: destination, delivered: true } });
       assert.deepEqual(JSON.parse(readFileSync(destination, 'utf8')), { operation, secrets: expected });
       if (process.platform !== 'win32') {
         assert.equal(statSync(destination).mode & 0o777, 0o600);
@@ -109,6 +111,34 @@ export async function verifyB4(h: Harness) {
       assert.equal((await run([...words, '--secret-output', denied], 1, { UNIFI_AXI_HOSTED: '1' })).error.code, 'HOSTED_DENIED');
       assert.equal(h.requests().length, requests, 'Hosted export fails before vendor access');
       assert.equal(existsSync(denied), false);
+      if (operation === 'OP-044' || operation === 'OP-069') {
+        const records = [id, other, '8c850c83-1111-4111-8111-000000000003']
+          .map(id => ({ ...(resource === 'voucher' ? voucher : wifi), id }));
+        h.seed(request => {
+          assert.equal(request.method, 'GET');
+          const url = new URL(request.url!, h.trusted.origin);
+          if (url.pathname.endsWith('/info')) return { applicationVersion: version };
+          const detail = records.find(row => url.pathname.endsWith(`/${row.id}`));
+          if (detail) return detail;
+          const offset = Number(url.searchParams.get('offset'));
+          const limit = Number(url.searchParams.get('limit'));
+          const data = records.slice(offset, offset + limit);
+          return { offset, limit, count: data.length, totalCount: records.length, data };
+        });
+        for (const [label, flags, offset, selected, complete, continuation] of [
+          ['capped', ['--limit', '1'], 0, records.slice(0, 1), false, { nextOffset: 1 }],
+          ['zero', ['--limit', '0', '--offset', '1'], 1, [], false, { nextOffset: 1 }],
+          ['tail', ['--limit', '1', '--offset', '2'], 2, records.slice(2), true, {}],
+          ['all', [], 0, records, true, {}],
+        ] as const) {
+          const path = join(h.home, `${label}-${operation}-${version}.json`);
+          const exported = await run([...words, ...flags, '--secret-output', path]);
+          assert.deepEqual(exported, { ids: selected.map(row => row.id), offset, count: selected.length,
+            totalCount: 3, complete, ...continuation, receipt: { operation, path, delivered: true } });
+          assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), { operation,
+            secrets: selected.flatMap(row => expected.map(secret => ({ ...secret, id: row.id }))) });
+        }
+      }
       rows.push({ task: 'B4.0', acceptance: 'STEP-B4.0', operation, version, status: 'passed',
         direction: 'private-response-export-and-host-denial' });
     }

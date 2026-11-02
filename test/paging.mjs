@@ -8,6 +8,15 @@ test('enumerates exact rows and metadata across pages', async () => {
   assert.deepEqual(await enumerate(async offset => page(offset, offset === 0 ? ['a', 'b'] : ['c']), row => row, 0, 2),
     { data: ['a', 'b', 'c'], offset: 0, count: 3, totalCount: 3, complete: true });
 });
+test('caps rows across short pages and requests only the remaining allowance', async () => {
+  const limits = [];
+  const result = await enumerate(async (offset, budget, limit) => {
+    limits.push(limit);
+    return page(offset, offset === 0 ? ['a', 'b'] : ['c'], 5);
+  }, row => row, 0, 3, bounds(), 3);
+  assert.deepEqual(result, { data: ['a', 'b', 'c'], offset: 0, count: 3, totalCount: 5, complete: false, nextOffset: 3 });
+  assert.deepEqual(limits, [3, 1]);
+});
 for (const [reason, read, limits] of [
   ['repeated records', async offset => page(offset, ['a']), {}],
   ['offset did not advance', async () => page(1, ['a']), {}],

@@ -82,7 +82,7 @@ export async function verifyBodyless(h: Harness) {
         assert.deepEqual(sent, [], 'Preview never mutates');
         const requestId = `bodyless-${route.operation}-${version}-${mode}`;
         const execute = [...args, '--execute', '--confirm', confirmation, '--request-id', requestId];
-        const outcome = mode === 'http-failure' ? 'unknown' : mode === 'verification-failure' || route.body ? 'accepted' : 'verified';
+        const outcome = mode === 'http-failure' ? 'rejected' : mode === 'verification-failure' || route.body ? 'accepted' : 'verified';
         const result = await run(execute, mode === 'http-failure' ? 1 : 0);
         assert.equal(result.write.outcome, outcome, `${route.operation} ${version} ${mode}`);
         assert.deepEqual(sent, [{ method: route.body ? 'POST' : 'DELETE', body: route.body ?? null }]);
@@ -92,7 +92,7 @@ export async function verifyBodyless(h: Harness) {
         const recovered = mode === 'verification-failure' && !route.body ? 'verified' : outcome;
         assert.equal((await run(execute, mode === 'http-failure' ? 1 : 0)).write.outcome, recovered);
         assert.equal(sent.length, 1, 'A failed status or verification never permits replay');
-        if (mode === 'http-failure') assert.equal(result.error.code, 'OUTCOME_UNKNOWN');
+        if (mode === 'http-failure') assert.equal(result.error.code, 'WRITE_REJECTED');
         rows.push({ task: 'B4.11', acceptance: 'NORM-002', operation: route.operation, version, mode, outcome, status: 'passed' });
       }
     }

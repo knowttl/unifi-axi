@@ -63,8 +63,8 @@ export async function readOperation(profile: Profile, secret: string, operation:
     return { [name]: result };
   }
   const limit = Number(values.limit ?? parameters.find(parameter => parameter.name === 'limit')!.schema.default ?? 25);
-  const result = await enumerate(async (offset, budget) => {
-    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  const result = await enumerate(async (offset, budget, pageLimit) => {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(pageLimit) });
     for (const parameter of parameters.filter(parameter => parameter.in === 'query' && !['offset', 'limit'].includes(parameter.name))) {
       const value = values[parameterFlag(parameter.name)];
       if (value !== undefined) query.set(parameter.name, value);
@@ -88,7 +88,7 @@ export async function readOperation(profile: Profile, secret: string, operation:
     }
     return page;
   }, row => String(row[operation.id === 'OP-003' ? 'code' : operation.id === 'OP-006' ? 'macAddress' : 'id']),
-  Number(values.offset ?? 0), limit);
+  Number(values.offset ?? 0), limit, undefined, values.limit === undefined ? undefined : limit);
   const { data, ...metadata } = result;
   return { [name]: data, ...metadata };
 }

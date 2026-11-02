@@ -154,6 +154,29 @@ export function compileContract(source: unknown, version: string) {
   }
   return {
     validate(pointer: string, value: unknown): string[] { return compile(at(pointer), pointer)(value, '', false); },
+    requestFields(pointer: string) {
+      const root = at(pointer);
+      const base = root.$ref ? at(root.$ref) : root;
+      const variants = Object.entries(base.discriminator?.mapping ?? { body: pointer });
+      return variants.map(([variant, ref]) => {
+        const properties: Record<string, Schema> = {};
+        const required = new Set<string>();
+        const visited = new Set<Schema>();
+        const collect = (schema: Schema): void => {
+          if (visited.has(schema)) return;
+          visited.add(schema);
+          if (schema.$ref) collect(at(schema.$ref));
+          for (const parent of schema.allOf ?? []) collect(parent);
+          Object.assign(properties, schema.properties);
+          for (const key of schema.required ?? []) required.add(key);
+        };
+        collect(base);
+        collect(at(ref));
+        return { variant, fields: Object.entries(properties).map(([name, schema]) => ({ name,
+          type: schema.$ref ?? schema.type ?? 'object', required: required.has(name),
+          ...(schema.enum ? { enum: schema.enum } : {}) })) };
+      });
+    },
     replacementProjection(pointer: string, body: Record<string, unknown>): Record<string, unknown> {
       const properties: Record<string, Schema> = {};
       const visited = new Set<Schema>();

@@ -7,7 +7,7 @@ import { Profiles, writeAllowed, type Selection } from './profiles.js';
 import { readOperation } from './reads.js';
 import { ToolError, type Redactor } from './security.js';
 import { contractValidator } from './validation.js';
-import { sendMutation, type PeerIdentity } from './transport.js';
+import { sendMutation, UpstreamError, type PeerIdentity } from './transport.js';
 import { digest, WriteJournal, type Intent } from './write-journal.js';
 import { PrivateFiles } from './private-file.js';
 import { isAbsolute } from 'node:path';
@@ -144,8 +144,14 @@ async function candidate(ctx: Context, operation: Operation, values: Record<stri
   if (operation.contracts.find(contract => contract.version === version)!.requestBody) {
     if (!values['body-file']) throw new ToolError('INVALID_ARGUMENT', `${operation.command} requires --body-file <path>.`);
     let parsed: unknown;
-    try { parsed = JSON.parse(await new PrivateFiles().read(values['body-file'], true)); }
-    catch { throw new ToolError('INVALID_ARGUMENT', 'Unable to read a JSON request body file.'); }
+    let text: string;
+    try { text = await new PrivateFiles().read(values['body-file'], true); }
+    catch (error) {
+      if (error instanceof ToolError) throw error;
+      throw new ToolError('INVALID_ARGUMENT', 'Unable to read the request body file. Check that the file exists and is readable.');
+    }
+    try { parsed = JSON.parse(text); }
+    catch { throw new ToolError('INVALID_ARGUMENT', 'Request body file must contain valid JSON.'); }
     if (validator.validateRequest(`${pointer}/requestBody/content/application~1json/schema`, parsed).length) {
       throw new ToolError('INVALID_ARGUMENT', 'Request body does not match the selected Network contract.');
     }
@@ -199,12 +205,17 @@ async function selectedState(ctx: Context, request: Pick<Candidate, 'operation' 
 }
 
 function receipt(record: Intent, requestId: string) {
-  return { write: { requestId, ...record },
+  const { rejection, ...intent } = record;
+  return { write: { requestId, ...intent },
     ...(record.outcome === 'unknown' ? { error: { code: 'OUTCOME_UNKNOWN', message: 'The request may have reached the vendor. Never resend it.' } } : {}),
-    help: [`unifi-axi write show --request-id ${requestId}`, `unifi-axi write reconcile --request-id ${requestId}`] };
+    ...(record.outcome === 'rejected' ? { error: { code: 'WRITE_REJECTED',
+      message: 'The vendor refused this request. This request ID is final; preview a corrected request with a new ID.' }, upstream: rejection } : {}),
+    help: record.outcome === 'rejected' ? ['Preview a corrected request, then execute it with a new request ID.'] :
+      [`unifi-axi write show --request-id ${requestId}`, `unifi-axi write reconcile --request-id ${requestId}`] };
 }
 
 async function verify(ctx: Context, record: Intent): Promise<Intent['outcome']> {
+  if (record.outcome === 'rejected') return 'rejected';
   const operation = catalogue.find(op => op.id === record.operation)!;
   if (record.operation === 'OP-043' || record.operation === 'OP-045') {
     if (!record.targets) return record.outcome;
@@ -259,6 +270,11 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
     path: `/proxy/network/integration${operation.id === 'OP-043' ? request.path.split('?')[0] + '?filter=[REDACTED]' : request.path}`,
     site: request.site, targets: request.targets, body: request.body, confirmation,
     identity: ctx.identity, applicationVersion: ctx.api.applicationVersion },
+    ...(request.body?.type === 'STANDARD' &&
+      (request.body.securityConfiguration as Record<string, unknown> | undefined)?.type === 'WPA2_PERSONAL' &&
+      (request.body.securityConfiguration as Record<string, unknown>).fastRoamingEnabled === undefined ? {
+        warnings: ['STANDARD WPA2_PERSONAL broadcasts require securityConfiguration.fastRoamingEnabled. Set it explicitly before execution.'],
+      } : {}),
     help: ['Repeat the same request with --execute --confirm <confirmation> --request-id <stable-id>. Concurrent vendor changes can occur after the final read.'] };
   if (values.confirm !== confirmation) throw new ToolError('CONFIRMATION_MISMATCH', 'Request, selected state or identity changed. Preview the request again.');
   let projection = request.body;
@@ -330,8 +346,15 @@ async function performWrite(profiles: Profiles, explicit: string | undefined, re
     await journal!.save(record);
   } catch (error) {
     if (record.outcome === 'not-sent') throw error;
+    if (record.outcome === 'unknown' && error instanceof UpstreamError && error.upstream.status >= 400 && error.upstream.status < 500) {
+      record.outcome = 'rejected';
+      record.rejection = error.upstream;
+      await journal!.save(record);
+    }
     // Keep the synced possible-send record if acknowledgement or verification failed.
-    return { ...receipt(record, values['request-id']!), ...(record.outcome === 'accepted' ? { verification: 'pending' } : {}) };
+    return { ...receipt(record, values['request-id']!),
+      ...(record.outcome === 'unknown' && error instanceof UpstreamError ? { upstream: error.upstream } : {}),
+      ...(record.outcome === 'accepted' ? { verification: 'pending' } : {}) };
   }
   return receipt(record, values['request-id']!);
 }
@@ -382,7 +405,7 @@ export async function inspectWrite(profiles: Profiles, explicit: string | undefi
   if (!reconcile) return receipt(record, requestId);
   // An ambiguous create has no trustworthy vendor ID. Similar objects prove nothing.
   const outcome = await verify(ctx, record);
-  if (!record.target && !record.targets && !ordering[record.operation]) {
+  if (record.outcome !== 'rejected' && !record.target && !record.targets && !ordering[record.operation]) {
     const family = families.find(family => family.writes.includes(record.operation))!;
     await readOperation(ctx.selected.profile, ctx.secret, catalogue.find(op => op.id === family.list)!, { site: record.site }, ctx.api.contract!, ctx.peer);
   }

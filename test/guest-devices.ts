@@ -143,7 +143,7 @@ export async function verifyGuestDevices(h: Harness) {
       }
       assert.equal(sent.length, 0, 'Malformed, denied and stale requests send zero mutations');
       failure = true;
-      assert.equal((await run(execute(confirmation, 'http-failure'), 1)).write.outcome, 'unknown');
+      assert.equal((await run(execute(confirmation, 'http-failure'), 1)).write.outcome, 'rejected');
       assert.equal(completed, 0);
       failure = false;
       const result = await run(execute(confirmation, 'success'));

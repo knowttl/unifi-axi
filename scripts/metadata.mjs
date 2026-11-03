@@ -15,7 +15,7 @@ await writeFile(new URL('../dist/SKILL.md', import.meta.url), [
   'Use `unifi-axi <command> --help` for inputs and effects.',
   'Implemented reads include supporting catalogues, WAN/VPN overviews, devices, clients, networks, firewall policies and zones, ACL rules, DNS policies, traffic lists, vouchers, Wi-Fi broadcasts and switching structures, plus info/site discovery and doctor.',
   'Device reads on Network 11.0.97 remain gated by the unresolved CF-007 PoE contract conflict. Network 10.6.109 preserves numeric PoE types.',
-  'Firewall policy list/show remain gated by reachable unresolved source conflicts. Wi-Fi detail radio rates use reviewed exact-field numeric enum resolutions.',
+  'See the [README commands](../README.md#commands) and [limitations](../README.md#limitations) for supported reads and current contract restrictions.',
   'Voucher codes and Wi-Fi passphrases are redacted. Standalone voucher and Wi-Fi exports default off: the selected file profile must set allowSecretExport: true and the caller must supply --secret-output <absolute-path>. Refusal precedes vendor access and file reservation. Export uses a new file in an existing private directory; see the [README reading notes](../README.md#commands) for ordinary output and list pagination metadata. Native read-only semantics remain unchanged. Hosted exports are denied. Diagnostic error codes remain visible.',
   'Use site list to discover site UUIDs; select one with --site <site-id> when home reports ambiguity.',
   'Unknown application versions require an explicit profile apiContract for visibly unverified read-only investigation and cannot execute writes.',

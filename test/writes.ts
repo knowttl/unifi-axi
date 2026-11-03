@@ -215,22 +215,26 @@ export async function verifyWrites(h: Harness) {
       assert.equal((await run(['write', 'reconcile', '--request-id', 'timed-out'], 1)).write.outcome, 'unknown');
       assert.equal(mutations, 1);
     }
-    for (const [fault, outcome] of [['before-claim', null], ['after-claim', 'corrupt'], ['after-intent-sync', 'not-sent'],
-      ['before-send', 'unknown'], ['after-possible-send', 'unknown'], ['after-ack', 'accepted']] as const) {
-      reset();
-      const preview = (await run(create)).preview.confirmation;
-      const requestId = `${fault}-${version}`;
-      await run(execute(create, preview, requestId), fault === 'before-claim' ? 1 : 99, { UNIFI_AXI_TEST_FAULT: fault });
-      const count: number = mutations;
-      if (fault !== 'after-possible-send' && fault !== 'after-ack') assert.equal(count, 0);
-      if (fault === 'after-ack') assert.equal(count, 1);
-      const show = await run(['write', 'show', '--request-id', requestId], outcome === null || outcome === 'corrupt' || outcome === 'unknown' ? 1 : 0);
-      if (outcome === null) assert.equal(show.error.code, 'WRITE_NOT_FOUND');
-      else if (outcome === 'corrupt') assert.equal(show.error.code, 'WRITE_JOURNAL_INVALID');
-      else {
-        assert.equal(show.write.outcome, outcome);
-        await run(execute(create, preview, requestId), outcome === 'unknown' ? 1 : 0);
-        assert.equal(mutations, count, 'Restart never reclaims a durable request ID');
+    // Both API contracts use the same journal crash-recovery state machine.
+    if (version === '10.6.109') {
+      for (const [fault, outcome] of [['before-claim', null], ['after-claim', 'corrupt'], ['after-intent-sync', 'not-sent'],
+        ['before-send', 'unknown'], ['after-possible-send', 'unknown'], ['after-ack', 'accepted']] as const) {
+        reset();
+        const preview = (await run(create)).preview.confirmation;
+        const requestId = `${fault}-${version}`;
+        await run(execute(create, preview, requestId), fault === 'before-claim' ? 1 : 99, { UNIFI_AXI_TEST_FAULT: fault });
+        const count: number = mutations;
+        if (fault !== 'after-possible-send' && fault !== 'after-ack') assert.equal(count, 0);
+        if (fault === 'after-ack') assert.equal(count, 1);
+        const show = await run(['write', 'show', '--request-id', requestId], outcome === null || outcome === 'corrupt' || outcome === 'unknown' ? 1 : 0);
+        if (outcome === null) assert.equal(show.error.code, 'WRITE_NOT_FOUND');
+        else if (outcome === 'corrupt') assert.equal(show.error.code, 'WRITE_JOURNAL_INVALID');
+        else {
+          assert.equal(show.write.outcome, outcome);
+          await run(execute(create, preview, requestId), outcome === 'unknown' ? 1 : 0);
+          assert.equal(mutations, count, 'Restart never reclaims a durable request ID');
+        }
+        rows.push({ task: 'B3.2', version, fault, status: 'passed', direction: 'journal-crash-recovery' });
       }
     }
     const files = readdirSync(log, { recursive: true }).map(String).filter(path => path.endsWith('.json'));
@@ -247,7 +251,7 @@ export async function verifyWrites(h: Harness) {
     assert.equal((await run(['write', 'show', '--request-id', unknownId], 1)).error.code, 'WRITE_JOURNAL_INVALID');
     assert.equal((await run(execute(create, lost, unknownId), 1)).error.code, 'WRITE_JOURNAL_INVALID');
     writeFileSync(join(log, journalFile), intact);
-    rows.push({ task: 'B3.2', version, status: 'passed', direction: 'durable-ownership-crash-recovery-and-redaction' });
+    rows.push({ task: 'B3.2', version, status: 'passed', direction: 'durable-ownership-and-redaction' });
     if (h.task === 'B3.3') rows.push({ task: 'B3.3', version, status: 'passed', direction: 'native-exact-target-and-denials',
       hosted: 'opt-in frozen Artium proof required; hosted writes deliberately denied without custody' });
   }

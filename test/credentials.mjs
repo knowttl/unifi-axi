@@ -319,5 +319,11 @@ Set-Acl -LiteralPath $p -AclObject $acl
   if (journey) rows.push({ task: 'B1.2a', acceptance: 'STEP-B1.2a', operation: ['OP-001', 'OP-002'],
     version: ['10.6.109', '11.0.97'], variant: null, direction: 'standalone-synthetic',
     status: 'passed-on-current-platform', nativeWindows: process.platform === 'win32' ? 'passed' : 'PENDING' });
-  return [...rows, ...inventoryRows, ...(coverage?.rows() ?? [])];
+  const operationRows = coverage?.operationRows('10.6.109') ?? [];
+  if (coverage && process.platform !== 'win32') {
+    assert.equal(operationRows.length, 73);
+    assert.deepEqual(operationRows.filter(row => row.status !== 'passed').map(row => row.command), [],
+      'Every 10.6.109 operation needs a successful public result and matching HTTP exchange');
+  }
+  return [...rows, ...inventoryRows, ...operationRows, ...(coverage?.rows() ?? [])];
 }

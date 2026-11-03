@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3](https://github.com/knowttl/unifi-axi/compare/unifi-axi-v0.1.2...unifi-axi-v0.1.3) (2026-11-03)
+
+
+### Bug Fixes
+
+* bind integrations to the correct installation ([#54](https://github.com/knowttl/unifi-axi/issues/54)) ([8e7afaf](https://github.com/knowttl/unifi-axi/commit/8e7afaf43607bec816fec8c7476a75434339e181))
+* clean up Artium proof state after callback failures ([#55](https://github.com/knowttl/unifi-axi/issues/55)) ([bdcd89e](https://github.com/knowttl/unifi-axi/commit/bdcd89ea15cc2347588244ec93f2e67112abcd33))
+* correct network write availability and verification ([#51](https://github.com/knowttl/unifi-axi/issues/51)) ([00b247f](https://github.com/knowttl/unifi-axi/commit/00b247ff95c5a2c6cbf3449e6d150a5fa8804d95))
+* reject impossible calendar dates in contract validation ([#53](https://github.com/knowttl/unifi-axi/issues/53)) ([68838e4](https://github.com/knowttl/unifi-axi/commit/68838e49873b3b86a39dd67a44f58a32646048be))
+
 ## [0.1.2](https://github.com/knowttl/unifi-axi/compare/unifi-axi-v0.1.1...unifi-axi-v0.1.2) (2026-11-02)
 
 

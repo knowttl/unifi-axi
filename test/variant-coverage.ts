@@ -62,6 +62,7 @@ export class VariantCoverage {
   private readonly secret: string;
   private readonly entries: Obligation[] = [];
   private readonly observed = new Set<string>();
+  private readonly successfulOperations = new Set<string>();
   private readonly previews = new Map<string, Value>();
 
   constructor(secret: string, installed: string) {
@@ -137,6 +138,9 @@ export class VariantCoverage {
     if (write && write.outcome !== (['OP-016', 'OP-022', 'OP-023'].includes(operation.id) ? 'accepted' : 'verified')) return;
     const path = new RegExp(`^/proxy/network/integration${operation.path.replace(/\{[^}]+\}/g, '[^/]+')}$`);
     const matching = exchanges.filter(exchange => exchange.method === operation.method && path.test(new URL(exchange.path, 'https://synthetic.invalid').pathname));
+    if ((operation.effect === 'read' || write) && matching.some(exchange => exchange.status >= 200 && exchange.status < 300)) {
+      this.successfulOperations.add(`${version}:${operation.id}`);
+    }
     for (const entry of this.entries.filter(entry => entry.operation === operation.id && entry.version === version && !this.observed.has(entry.key))) {
       const { variant, position } = entry;
       if (position.direction === 'parameter') continue;
@@ -192,6 +196,12 @@ export class VariantCoverage {
         if (this.observed.has(entry.key)) break;
       }
     }
+  }
+
+  operationRows(version: string) {
+    return catalogue.map(operation => ({ task: 'B4.11', version, operation: operation.id, command: operation.command,
+      effect: operation.effect, direction: 'operation-success',
+      status: this.successfulOperations.has(`${version}:${operation.id}`) ? 'passed' : 'not-observed' }));
   }
 
   rows() {

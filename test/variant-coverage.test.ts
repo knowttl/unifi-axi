@@ -66,6 +66,22 @@ for (const [name, wireScope, publishedScope] of [
   });
 }
 
+test('operation success requires a matching executed write exchange', () => {
+  const coverage = new VariantCoverage('synthetic-test-key', root);
+  const info: Exchange = { method: 'GET', path: '/proxy/network/integration/v1/info', request: '',
+    response: '{"applicationVersion":"10.6.109"}', status: 200 };
+  const body = firewallBody('10.6.109');
+  coverage.observe(['firewall', 'policy', 'create'], { preview: { body } }, [info]);
+  assert.equal(coverage.operationRows('10.6.109').find(row => row.operation === 'OP-031')?.status, 'not-observed');
+  const executed = { write: { operation: 'OP-031', outcome: 'verified', target: id } };
+  coverage.observe(['firewall', 'policy', 'create', '--execute'], executed, [info]);
+  assert.equal(coverage.operationRows('10.6.109').find(row => row.operation === 'OP-031')?.status, 'not-observed');
+  coverage.observe(['firewall', 'policy', 'create', '--execute'], executed,
+    [info, { method: 'POST', path: base, request: JSON.stringify(body),
+      response: JSON.stringify(firewallRecord('10.6.109', body)), status: 201 }]);
+  assert.equal(coverage.operationRows('10.6.109').find(row => row.operation === 'OP-031')?.status, 'passed');
+});
+
 test('every unobserved ledger position carries a pending reason', () => {
   const rows = new VariantCoverage('synthetic-test-key', root).rows();
   const expected = obligations.cases.reduce((count, variant) => count + variant.versions.length * variant.positions.length, 0);
